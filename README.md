@@ -1,5 +1,8 @@
 FrontEnd Deployed URL :-  https://medical-supply-coordination-platfor.vercel.app/
+
 BackEnd Deployed URL :- https://medical-supply-coordination-platform-ftmd.onrender.com/
+
+AI Deployed URL :-  https://medical-supply-coordination-platform.onrender.com/
 
 
 
