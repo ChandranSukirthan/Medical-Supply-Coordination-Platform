@@ -1,0 +1,13 @@
+[
+  { "hospitalId": "H001", "name": "Colombo National Hospital",   "location": "Colombo",    "province": "Western"   },
+  { "hospitalId": "H002", "name": "Kandy Teaching Hospital",     "location": "Kandy",      "province": "Central"   },
+  { "hospitalId": "H003", "name": "Galle Base Hospital",         "location": "Galle",      "province": "Southern"  },
+  { "hospitalId": "H004", "name": "Jaffna Teaching Hospital",    "location": "Jaffna",     "province": "Northern"  },
+  { "hospitalId": "H005", "name": "Negombo District Hospital",   "location": "Negombo",    "province": "Western"   },
+  { "hospitalId": "H006", "name": "Kurunegala District Hospital","location": "Kurunegala", "province": "North Western" },
+  { "hospitalId": "H007", "name": "Anuradhapura Teaching Hospital","location":"Anuradhapura","province":"North Central"},
+  { "hospitalId": "H008", "name": "Batticaloa Teaching Hospital","location": "Batticaloa", "province": "Eastern"   },
+  { "hospitalId": "H009", "name": "Ratnapura District Hospital", "location": "Ratnapura",  "province": "Sabaragamuwa"},
+  { "hospitalId": "H010", "name": "Matara District Hospital",    "location": "Matara",     "province": "Southern"  }
+]
+
