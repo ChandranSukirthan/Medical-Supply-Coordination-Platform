@@ -1,3 +1,8 @@
+FrontEnd Deployed URL :-  https://medical-supply-coordination-platfor.vercel.app/
+BackEnd Deployed URL :- https://medical-supply-coordination-platform-ftmd.onrender.com/
+
+
+
 # MedBridge LK — Medical Supply & Shortage Coordination Platform
 
 **MedBridge LK** is an intelligent inter-hospital coordination and medical supply management platform for Sri Lanka's healthcare network. It connects hospitals across all provinces, enabling administrators to report critical medicine shortages, locate nearby surplus supplies, request inter-hospital provisions with automatic real-time stock deduction, and receive AI-driven match recommendations.
