@@ -13,7 +13,11 @@ const app = express();
 
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || true,
+    origin: (origin, callback) => {
+      // Allow requests from all origins (Vercel frontend, localhost, mobile, curl)
+      callback(null, true);
+    },
+    credentials: true,
   })
 );
 app.use(express.json());
