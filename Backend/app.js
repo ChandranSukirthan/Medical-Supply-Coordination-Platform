@@ -18,6 +18,14 @@ app.use(
 );
 app.use(express.json());
 
+app.get("/", (req, res) => {
+  res.json({
+    success: true,
+    message: "MedBridge LK Backend API is running successfully!",
+    health: "/api/v1/health",
+  });
+});
+
 app.get("/api/v1/health", (req, res) => {
   res.json({ success: true, status: "healthy" });
 });
