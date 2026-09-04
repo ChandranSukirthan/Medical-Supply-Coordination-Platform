@@ -66,6 +66,10 @@ app.add_middleware(
 # ─── Routes ───────────────────────────────────────────────────────────────────
 app.include_router(router, prefix="/api/v1")
 
+@app.get("/")
+async def root():
+    return {"status": "ok", "message": "Medical Supply AI Service is running"}
+
 
 # ─── Entry point ──────────────────────────────────────────────────────────────
 if __name__ == "__main__":
