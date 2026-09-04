@@ -1,12 +1,12 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import Home from './pages/Home';
-import Login from './pages/Login';
-import Register from './pages/Register';
-import Dashboard from './pages/Dashboard';
-import ReportShortage from './pages/ReportShortage';
-import MatchSupply from './pages/MatchSupply';
-import AboutUs from './pages/AboutUs';
-import Analysis from './pages/Analysis';
+import Home from './pages/Home.jsx';
+import Login from './pages/Login.jsx';
+import Register from './pages/Register.jsx';
+import Dashboard from './pages/Dashboard.jsx';
+import ReportShortage from './pages/ReportShortage.jsx';
+import MatchSupply from './pages/MatchSupply.jsx';
+import AboutUs from './pages/AboutUs.jsx';
+import Analysis from './pages/Analysis.jsx';
 
 function App() {
   return (
