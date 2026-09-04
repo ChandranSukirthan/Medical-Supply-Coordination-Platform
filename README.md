@@ -1,271 +1,281 @@
-# MedBridge LK
+# MedBridge LK — Medical Supply & Shortage Coordination Platform
 
-MedBridge LK coordinates medicine requests, hospital stock, offers, transfers, and AI-assisted recommendations. The backend is a Node.js/Express API backed by MongoDB. The Python FastAPI service owns recommendation logic; it is not required for ordinary request, stock, or offer operations.
+**MedBridge LK** is an intelligent inter-hospital coordination and medical supply management platform for Sri Lanka's healthcare network. It connects hospitals across all provinces, enabling administrators to report critical medicine shortages, locate nearby surplus supplies, request inter-hospital provisions with automatic real-time stock deduction, and receive AI-driven match recommendations.
 
-Seed records are development/demo data only. They do not represent real hospital inventory or patient information.
+---
 
-## Architecture
+## Architecture Overview
 
 ```text
-React UI -> Node.js / Express -> MongoDB
-                |
-                +-> AI data adapter -> Python FastAPI
+       +-------------------------------------------------------------+
+       |               React 19 SPA (Vite + Tailwind)                |
+       |  (Dashboard, Match Supply, Shortage Ticket, AI Analysis)   |
+       +------------------------------+------------------------------+
+                                      | HTTP / REST (JWT Bearer)
+                                      v
+       +-------------------------------------------------------------+
+       |               Node.js / Express 5 API Server                |
+       |  - JWT Authentication & Hospital Facility Identity          |
+       |  - Stock, Request, Offer & Transaction Lifecycles           |
+       |  - Inter-Hospital Transfers & Atomic Stock Deduction        |
+       |  - In-Memory Serverless DB Pooling & CORS Security          |
+       +-------------------+--------------------+--------------------+
+                           |                    |
+             Mongoose / DB |                    | HTTP REST / JSON
+                           v                    v
+         +--------------------+       +------------------------------+
+         | MongoDB Atlas      |       | Python FastAPI Microservice  |
+         | Cloud Cluster      |       | - Urgency Scoring & Ranking  |
+         | (Replica Set ACID) |       | - Distance & Expiry Analysis |
+         +--------------------+       +------------------------------+
 ```
 
-Node owns authentication, authorization, validation, MongoDB data, business rules, and AI API communication. Python owns matching, scoring, ranking, and recommendation reasons. React owns UI, navigation, forms, and displaying results. React never connects directly to MongoDB or Python.
+- **Frontend**: React 19, Vite 8, Tailwind CSS 4, Lucide React, Axios, React Router 7.
+- **Backend API**: Node.js, Express 5, Mongoose 9, JWT, bcryptjs, CORS.
+- **Database**: MongoDB Atlas (supports atomic operations for stock deductions and transactions).
+- **AI Service**: Python 3.10+, FastAPI, Pydantic, Scikit-learn (intelligent match scoring).
 
-## Setup
+---
 
-Requirements: Node.js 20+, MongoDB 6+ (a replica set is required for transaction acceptance/completion), and optionally the Python AI service.
+## Core Features & Workflows
 
-```powershell
+### 1. Hospital Facility Authentication & Demo Switcher
+- Administrators register with official hospital identity (`hospitalId`, facility name, city, province).
+- Secure stateless authentication using JSON Web Tokens (JWT).
+- **Quick Facility Switcher**: In-app profile switcher to instantly toggle active hospital sessions between **Jaffna (`JF001`)**, **Kilinochchi (`KK001`)**, and **Colombo (`H001`)** without re-logging in, allowing seamless testing of multi-hospital interactions.
+
+### 2. Medicine Shortage Reporting
+- Report critical supply deficiencies specifying medicine name, quantity, required date, and urgency (`HIGH`, `MEDIUM`, `LOW`).
+- Clear status tracking: `open` &rarr; `accepted` &rarr; `completed` / `cancelled`.
+
+### 3. Surplus Inventory & Ownership Demarcation
+- Register available hospital surplus with batch expiry dates.
+- Clear visual separation in the UI between **"Your Facility Inventory"** (internal stock) and external **"Donor Facility Stock"** (`Donor: Facility Name (ID)`).
+
+### 4. Inter-Hospital Provision Requests & Atomic Stock Deduction
+- Facilities facing shortages can request exact quantities from any external hospital's surplus stock.
+- The donor hospital receives an instant unread notification in their notifications center.
+- When the donor hospital clicks **Accept**, the exact approved quantity is **atomically deducted from MongoDB Atlas** in real time.
+- If rejected, the requesting facility is notified and donor inventory remains intact.
+
+### 5. AI-Assisted Recommendation Engine
+- Scores potential donor matches based on proximity (same province / nearest district), urgency alignment, and medicine batch expiry.
+- Provides human-readable reasoning explanations for each recommendation.
+- Seamless fallback to rule-based matching if the Python service is offline.
+
+---
+
+## Quick Start & Local Setup
+
+### Prerequisites
+- Node.js 20+
+- MongoDB 6+ (or MongoDB Atlas connection URI)
+- Python 3.10+ *(optional, only for the AI recommendation service)*
+
+---
+
+### 1. Backend Setup
+
+```bash
 cd Backend
 npm install
-Copy-Item .env.example .env
-# Edit .env and set JWT_SECRET and MONGO_URI
-npm run seed       # optional: resets development collections
-npm start
+
+# Configure environment variables
+cp .env.example .env
+# Edit .env and verify MONGO_URI and JWT_SECRET
+
+# Seed MongoDB with realistic Sri Lankan hospital & stock data
+npm run seed
+
+# Start development server
+npm run dev
+# Backend runs on http://localhost:5001 (or port specified in .env)
 ```
 
-The API listens on `http://localhost:5000` by default. Run tests with `npm test` from `Backend`.
+### 2. Frontend Setup
 
-## Environment
+```bash
+cd Frontend/medbridge-frontend
+npm install
 
-| Variable | Purpose | Default |
-| --- | --- | --- |
-| `PORT` | Node API port | `5000` |
-| `MONGO_URI` | MongoDB connection string | `mongodb://127.0.0.1:27017/medbridge_lk` |
-| `JWT_SECRET` | Secret used to sign JWTs | required |
-| `AI_SERVICE_URL` | Python FastAPI base URL | `http://localhost:8000` |
-| `AI_REQUEST_TIMEOUT_MS` | AI request timeout | `5000` |
-| `CLIENT_URL` | CORS origin | `http://localhost:5173` |
-
-Never commit `.env` or use the demo JWT secret outside development.
-
-## Authentication
-
-Register or log in to receive a JWT. Send it on protected requests:
-
-```text
-Authorization: Bearer <token>
+# Start Vite development server
+npm run dev
+# Frontend runs on http://localhost:5173
 ```
 
-The hospital identity used for ownership and supplier fields always comes from the verified JWT, never from client input. Password hashes are excluded from normal user queries and responses.
+### 3. (Optional) AI Service Setup
 
-## Data Models
+```bash
+cd ai-service
+python -m venv venv
+source venv/bin/activate   # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
 
-- `Hospital`: `hospitalId`, name, location, province.
-- `User`: `userId`, hospital, email, private `passwordHash`, role.
-- `Stock`: `stockId`, hospital, medicine, quantity, `reservedQuantity`, location, province, expiry, status.
-- `MedicineRequest`: request, requesting hospital, medicine, quantity, urgency, location, province, required date, status.
-- `Offer`: offer, request, supplier hospital, medicine, offered quantity, status, message.
-- `Transaction`: transaction, request, offer, supplier, recipient, medicine, quantity, status, timestamps, stock allocations.
+---
 
-## Workflows
+## Seed Data & Demo Accounts
 
-Stock is available only when it is marked `available`, is not expired, and has positive `quantity - reservedQuantity`. Offer acceptance runs in a MongoDB transaction, claims the open request, atomically reserves current stock, creates a transaction, and cancels other pending offers. Completion atomically converts reservations into deducted stock. Cancellation releases reservations.
+Run `npm run seed` inside `Backend/` to populate MongoDB Atlas with hospitals, stock, and active shortages:
 
-The transaction lifecycle is `pending -> in_transfer -> completed`. A pending or in-transfer transaction may be cancelled according to ownership rules. Completed and cancelled transactions cannot transition again.
+| Hospital Name | Hospital ID | Email | Password | Province |
+| :--- | :--- | :--- | :--- | :--- |
+| **Jaffna General Hospital** | `JF001` | `sukirsukirthan347@gmail.com` | `password123` | Northern |
+| **Kilinochchi Base Hospital** | `KK001` | `sukirthan@gmail.com` | `password123` | Northern |
+| **Colombo National Hospital** | `H001` | `demo@medbridge.lk` | `MedBridgeDemo123!` | Western |
+| **Kandy Teaching Hospital** | `H002` | `h002@medbridge.lk` | `password123` | Central |
+| **Karapitiya Teaching Hospital** | `H003` | `h003@medbridge.lk` | `password123` | Southern |
+| **Teaching Hospital Anuradhapura** | `H005` | `h005@medbridge.lk` | `password123` | North Central |
 
-Request lifecycle is `open -> accepted -> completed`; an open request may also become `cancelled`. Offers are created as `pending`; recipients can accept or reject, and suppliers can cancel. Only the requesting hospital accepts offers. Suppliers start transfers; recipients confirm completion.
+---
+
+## Environment Variables
+
+### Backend (`Backend/.env`)
+
+| Variable | Description | Example / Default |
+| :--- | :--- | :--- |
+| `PORT` | API Server listening port | `5000` or `5001` |
+| `MONGO_URI` | MongoDB Atlas / local connection string | `mongodb+srv://user:pass@cluster.mongodb.net/?appName=Cluster0` |
+| `JWT_SECRET` | Secret key for signing authorization JWTs | `medbridge_lk_production_jwt_secret_key_2026` |
+| `CLIENT_URL` | Allowed frontend origin for CORS | `*` or `https://<your-app>.vercel.app` |
+| `AI_SERVICE_URL` | Python FastAPI recommendation URL | `http://localhost:8000` |
+| `AI_REQUEST_TIMEOUT_MS` | AI microservice timeout limit | `5000` |
+
+### Frontend (`Frontend/medbridge-frontend/.env`)
+
+| Variable | Description | Example / Default |
+| :--- | :--- | :--- |
+| `VITE_API_BASE_URL` | Live backend API base URL | `https://<your-backend>.onrender.com/api/v1` |
+
+---
 
 ## API Reference
 
-All response bodies use JSON. Unless marked public, endpoints require a valid JWT. IDs accept the public IDs shown below and, where applicable, MongoDB ObjectIds.
+All protected routes require an `Authorization: Bearer <JWT>` header. All responses are in JSON format.
 
-### Authentication
+### Health & Root
+- `GET /`: Service identification and status overview.
+- `GET /api/v1/health`: Returns `{ "success": true, "status": "healthy" }`.
 
-| Method and endpoint | Auth | Purpose and body | Responses/errors |
-| --- | --- | --- | --- |
-| `POST /api/v1/auth/register` | No | Create hospital and admin. Body: `hospitalId`, `name`, `location`, `province`, `email`, `password`. | `201` user; `400` validation; `409` duplicate hospital/email. |
-| `POST /api/v1/auth/login` | No | Body: `email`, `password`. | `200` token/user; `401` invalid credentials; `400` missing fields. |
-| `GET /api/v1/auth/me` | Yes | Return current user and hospital. | `200`; `401` invalid token; `404` user not found. |
+### Authentication (`/api/v1/auth`)
+- `POST /register`: Register hospital and admin account.
+- `POST /login`: Log in with email/password; returns JWT and user profile with hospital details.
+- `GET /me`: Get authenticated user profile and hospital identity.
+- `GET /hospitals`: List all registered hospitals across the network.
 
-### Health
+### Stock Management (`/api/v1/stock`)
+- `POST /`: Add new available medicine stock (hospital bound from JWT).
+- `GET /my`: List stock owned by the authenticated hospital.
+- `GET /available`: List all unexpired, available surplus stock across all hospitals.
+- `GET /:id`: Fetch stock item details.
+- `PUT /:id`: Update stock item.
+- `DELETE /:id`: Remove stock item.
 
-| Method and endpoint | Auth | Purpose | Response/errors |
-| --- | --- | --- | --- |
-| `GET /api/v1/health` | No | Check API process health. | `200 { success: true, status: "healthy" }`. |
+### Shortage Requests (`/api/v1/requests`)
+- `POST /`: Submit new medicine shortage ticket.
+- `GET /open`: List all active, non-overdue shortage requisitions across all hospitals.
+- `GET /my`: List shortage requests reported by the current hospital.
+- `GET /:id`: Fetch single shortage requisition.
+- `PUT /:id`: Update shortage ticket details.
+- `PATCH /:id/cancel`: Cancel an open shortage ticket.
 
-### Stock
+### Inter-Hospital Transfers (`/api/v1/transfers`)
+- `POST /request`: Request a medicine provision from a donor hospital's surplus stock.
+- `GET /notifications`: Fetch incoming pending provision requests for current donor facility.
+- `POST /:transferId/accept`: Accept incoming transfer; **atomically deducts exact approved stock quantity in MongoDB**.
+- `POST /:transferId/reject`: Decline incoming provision request.
+- `GET /my`: List all transfer activities (both requested and supplied) for current hospital.
 
-Stock body: `stockId`, `medicine`, `quantity`, `location`, `province`, `expiryDate`, optional `status` (`available` or `unavailable`). The hospital is taken from the JWT.
+### AI Recommendations (`/api/v1/recommendations`)
+- `GET /requests/:requestId`: Request ranked donor suggestions with AI reasoning.
+- `GET /stock/:stockId`: Request candidate recipient shortages for excess stock.
 
-| Method and endpoint | Auth | Purpose | Responses/errors |
-| --- | --- | --- | --- |
-| `POST /api/v1/stock` | Yes | Create stock. | `201`; `400` invalid/negative quantity or date; `403` hospital mismatch; `409` duplicate. |
-| `GET /api/v1/stock/my` | Yes | List current hospital stock. | `200`; `401`. |
-| `GET /api/v1/stock/available` | Yes | List non-expired stock with unreserved units. | `200`; `401`. |
-| `GET /api/v1/stock/:id` | Yes | Read stock by public or Mongo ID. | `200`; `404`; `401`. |
-| `PUT /api/v1/stock/:id` | Yes, owner | Replace editable stock fields. | `200`; `400`; `403`; `404`; `409` below-reservation quantity. |
-| `PATCH /api/v1/stock/:id/status` | Yes, owner | Body: `{ "status": "available" }` or `unavailable`. | `200`; `400`; `403`; `404`. |
-| `DELETE /api/v1/stock/:id` | Yes, owner | Delete stock. | `200`; `403`; `404`. |
+---
 
-### Requests
+## Deployment Guide
 
-Request body: `requestId`, `medicine`, integer `quantity`, `urgency` (`LOW`, `MEDIUM`, `HIGH`), `location`, `province`, and ISO `requiredBy`. Hospital comes from JWT.
+### Deploying Backend to Render
+1. Create a new **Web Service** on [Render](https://render.com/).
+2. Connect your GitHub repository.
+3. Set **Root Directory** to `Backend`.
+4. Build Command: `npm install` | Start Command: `npm start`.
+5. Add Environment Variables: `MONGO_URI`, `JWT_SECRET`, `CLIENT_URL` (set to `*`).
+6. In MongoDB Atlas, ensure **Network Access** allows `0.0.0.0/0` (Anywhere).
 
-| Method and endpoint | Auth | Purpose | Responses/errors |
-| --- | --- | --- | --- |
-| `POST /api/v1/requests` | Yes | Create an open medicine request. | `201`; `400` validation; `403`; `404` hospital. |
-| `GET /api/v1/requests/open` | Yes | List all open, not-overdue requests. | `200`; `401`. |
-| `GET /api/v1/requests/my` | Yes | List current hospital requests. | `200`; `401`. |
-| `GET /api/v1/requests/:requestId/matches` | Yes, requester | List database-eligible suppliers without AI ranking. | `200`; `403`; `404`. |
-| `GET /api/v1/requests/:id` | Yes | Read a request. | `200`; `404`; `401`. |
-| `PUT /api/v1/requests/:id` | Yes, owner | Edit an open request using the request body above. | `200`; `400`; `403`; `404`; `409` non-open. |
-| `PATCH /api/v1/requests/:id/cancel` | Yes, owner | Cancel an open request. | `200`; `403`; `404`; `409` non-open. |
+### Deploying Frontend to Vercel
+1. Import your GitHub repository on [Vercel](https://vercel.com/).
+2. Set **Root Directory** to `Frontend/medbridge-frontend`.
+3. Framework Preset: `Vite`.
+4. Add Environment Variable:
+   - `VITE_API_BASE_URL`: `https://<your-render-backend-name>.onrender.com/api/v1`
+5. Deploy. SPA routing is pre-configured via `vercel.json`.
 
-### Offers
+---
 
-Offer body: `offerId`, `requestId`, `medicine`, integer `quantityOffered`, optional `message`. Supplier hospital comes from JWT.
-
-| Method and endpoint | Auth | Purpose | Responses/errors |
-| --- | --- | --- | --- |
-| `POST /api/v1/offers` | Yes | Supplier creates a pending offer for another hospital's open request. | `201`; `400`; `403`; `404`; `409` request/stock conflict. |
-| `GET /api/v1/offers/my` | Yes | List offers made by current hospital. | `200`; `401`. |
-| `GET /api/v1/requests/:requestId/offers` | Yes, requester | List offers on a request. | `200`; `403`; `404`. |
-| `PATCH /api/v1/offers/:id/accept` | Yes, requester | Atomically reserve stock and create a transaction. No body. | `201`; `403`; `404`; `409` request no longer open, offer not pending, or insufficient current stock. |
-| `PATCH /api/v1/offers/:id/reject` | Yes, requester | Reject a pending offer. No body. | `200`; `403`; `404`; `409` non-pending. |
-| `PATCH /api/v1/offers/:id/cancel` | Yes, supplier | Cancel a pending offer. No body. | `200`; `403`; `404`; `409` non-pending. |
-
-### Transactions
-
-Transactions are created by offer acceptance; there is no client-controlled transaction creation endpoint.
-
-| Method and endpoint | Auth | Purpose | Responses/errors |
-| --- | --- | --- | --- |
-| `GET /api/v1/transactions/my` | Yes | List transactions where current hospital is supplier or recipient. | `200`; `401`. |
-| `GET /api/v1/transactions/:id` | Yes, participant | Read a transaction. | `200`; `403`; `404`. |
-| `PATCH /api/v1/transactions/:id/start` | Yes, supplier | Move `pending` to `in_transfer`. No body. | `200`; `403`; `404`; `409` invalid transition. |
-| `PATCH /api/v1/transactions/:id/complete` | Yes, recipient | Deduct reserved stock and move to `completed`. No body. | `200`; `403`; `404`; `409` stock conflict/invalid transition. |
-| `PATCH /api/v1/transactions/:id/cancel` | Yes, supplier or recipient | Release reservations and cancel a pending/in-transfer transaction. No body. | `200`; `403`; `404`; `409` invalid transition/stock conflict. |
-
-### Recommendations
-
-| Method and endpoint | Auth | Purpose | Query parameters and errors |
-| --- | --- | --- | --- |
-| `GET /api/v1/recommendations/requests/:requestId` | Yes, requester | Ask Python for supplier recommendations using current valid stock. | Optional `limit` (default 5, max 50); `403` ownership; `404`; `409` non-open; `503` AI unavailable. |
-| `GET /api/v1/recommendations/stock/:stockId` | Yes, stock owner | Ask Python for recipient recommendations using current open requests. | Optional `limit`; `403` ownership; `404`; `409` unavailable/expired; `503` AI unavailable. |
-
-AI failures return `503` with `success: false`, an empty `recommendations` array, and the message `AI recommendations are temporarily unavailable.` Core APIs do not call Python and continue operating.
-
-## AI Contract
-
-Node sends supplier recommendations to `POST /api/v1/recommend/suppliers`:
-
-```json
-{
-  "request": {
-    "requestId": "REQ001",
-    "hospitalId": "H010",
-    "medicine": "Insulin",
-    "quantity": 80,
-    "urgency": "HIGH",
-    "location": "Matara",
-    "province": "Southern",
-    "requiredBy": "2026-09-15",
-    "status": "open"
-  },
-  "availableStock": [
-    {
-      "stockId": "STK001",
-      "hospitalId": "H001",
-      "medicine": "Insulin",
-      "quantity": 120,
-      "location": "Colombo",
-      "province": "Western",
-      "expiryDate": "2027-02-10",
-      "status": "available"
-    }
-  ],
-  "limit": 5
-}
-```
-
-Node sends recipient recommendations to `POST /api/v1/recommend/recipients`:
-
-```json
-{
-  "stock": {
-    "stockId": "STK001",
-    "hospitalId": "H001",
-    "medicine": "Insulin",
-    "quantity": 120,
-    "location": "Colombo",
-    "province": "Western",
-    "expiryDate": "2027-02-10",
-    "status": "available"
-  },
-  "openRequests": [
-    {
-      "requestId": "REQ001",
-      "hospitalId": "H010",
-      "medicine": "Insulin",
-      "quantity": 80,
-      "urgency": "HIGH",
-      "location": "Matara",
-      "province": "Southern",
-      "requiredBy": "2026-09-15",
-      "status": "open"
-    }
-  ],
-  "limit": 5
-}
-```
-
-Python returns rankings unchanged, for example:
-
-```json
-{
-  "requestId": "REQ001",
-  "recommendations": [
-    {
-      "hospitalId": "H001",
-      "matchScore": 96,
-      "reasons": ["Medicine match", "Sufficient quantity", "Good location match"]
-    }
-  ]
-}
-```
-
-The adapter converts internal request statuses to `open` or `cancelled`, stock statuses to `available` or `unavailable`, and sends reserved stock as currently available quantity. Node does not alter scores, ranking, or reasons.
-
-## Seed Data
-
-From `Backend`, run `npm run seed`. The script clears the development hospital, user, request, and stock collections and inserts:
-
-- 10 Sri Lankan hospitals (`H001` through `H010`), users, and demo credentials.
-- 10 medicine requests (`REQ001` through `REQ010`), including `REQ009` cancelled.
-- 15 stock records (`STK001` through `STK015`), including `STK006` quantity zero, `STK007` expired, and `STK013` unavailable.
-- All seeded users use `MedBridgeDemo123!` for local development only. Emails are `<hospital-id>@medbridge.demo`.
-
-The seed includes `H010` in Matara and `REQ001` for 80 Insulin units to support the demo workflow. Use a unique request ID when repeating the scenario after seeding.
-
-## Testing
-
-The current automated suite uses Node's built-in test runner and mocks `fetch`, so it never requires Python to run. It verifies exact supplier/recipient payloads, date and status conversion, successful recommendations, connection failure, invalid response, and timeout handling.
-
-```powershell
-cd Backend
-npm test
-```
-
-For the full manual demo: log in as `H010`, create an open Insulin request, call the open-request and supplier-recommendation endpoints, create an offer from a suitable supplier, accept it as H010, start it as the supplier, and complete it as H010. Then verify the transaction is `completed`, the request is `completed`, the offer is `completed`, and supplier quantity decreased by the transferred amount while never becoming negative.
-
-The automated suite does not start MongoDB or Python and therefore does not claim to replace a deployed MongoDB replica-set end-to-end run. That run should be performed in an environment with the configured database and FastAPI service.
-
-## Backend Structure
+## Project Structure
 
 ```text
-Backend/
-  app.js
-  server.js
-  config/db.js
-  controllers/       auth, stock, request, offer, transaction, recommendation
-  middleware/        authentication and error handling
-  models/            Hospital, User, Stock, MedicineRequest, Offer, Transaction
-  routes/            auth, stock, request, offer, transaction, recommendation
-  services/          matching, AI client, AI data adapter
-  seed/seed.js
-  test/aiIntegration.test.js
+Medical-Supply-Coordination-Platform/
+├── Backend/
+│   ├── api/
+│   │   └── index.js              # Vercel serverless function entrypoint
+│   ├── config/
+│   │   └── db.js                 # MongoDB connection & connection pooling
+│   ├── controllers/              # Business logic controllers
+│   │   ├── authController.js
+│   │   ├── stockController.js
+│   │   ├── requestController.js
+│   │   ├── transferController.js # Provision requests, notifications & stock deduction
+│   │   ├── offerController.js
+│   │   ├── transactionController.js
+│   │   └── recommendationController.js
+│   ├── middleware/               # Auth (JWT) & error handling middleware
+│   ├── models/                   # Mongoose schemas
+│   │   ├── Hospital.js
+│   │   ├── User.js
+│   │   ├── Stock.js
+│   │   ├── MedicineRequest.js
+│   │   ├── TransferRequest.js
+│   │   ├── Offer.js
+│   │   └── Transaction.js
+│   ├── routes/                   # Express routes
+│   ├── seed/
+│   │   └── seed.js               # Database seeding script with SL hospital data
+│   ├── app.js                    # Express app definition & CORS policy
+│   ├── server.js                 # HTTP server entrypoint
+│   ├── vercel.json               # Backend Vercel deployment configuration
+│   └── package.json
+├── Frontend/
+│   └── medbridge-frontend/
+│       ├── src/
+│       │   ├── pages/            # React views
+│       │   │   ├── Home.jsx
+│       │   │   ├── Login.jsx
+│       │   │   ├── Register.jsx
+│       │   │   ├── Dashboard.jsx
+│       │   │   ├── ReportShortage.jsx
+│       │   │   ├── MatchSupply.jsx
+│       │   │   ├── AboutUs.jsx
+│       │   │   └── Analysis.jsx
+│       │   ├── App.jsx           # Client router & navigation
+│       │   ├── AuthContext.jsx   # Authentication context & quick facility switcher
+│       │   ├── api.js            # Axios client with auto URL normalization
+│       │   └── main.jsx
+│       ├── vercel.json           # Frontend SPA client routing rules
+│       ├── vite.config.js
+│       └── package.json
+├── ai-service/                   # FastAPI recommendation microservice
+│   ├── app/
+│   │   ├── main.py
+│   │   ├── config.py
+│   │   └── services/
+│   └── requirements.txt
+└── README.md
 ```
+
+---
+
+## License
+Licensed under the ISC License. Designed for hospital medical coordination and emergency supply redistribution across Sri Lanka.
