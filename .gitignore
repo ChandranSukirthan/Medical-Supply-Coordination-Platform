@@ -1,6 +1,8 @@
 node_modules
+.env
+**/.env
 
-# AI Service — Python
+# AI Service - Python
 ai-service/.venv
 ai-service/__pycache__
 ai-service/**/__pycache__

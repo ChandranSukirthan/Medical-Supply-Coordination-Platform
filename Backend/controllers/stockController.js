@@ -1,70 +1,106 @@
-const Stock = require('../models/Stock');
-const { generateId } = require('../utils/helpers');
+const mongoose = require("mongoose");
+const Hospital = require("../models/Hospital");
+const Stock = require("../models/Stock");
+const { normalizeMedicine } = require("../utils/medicine");
 
-exports.createStock = async (req, res) => {
-  try {
-    const { medicine, quantity, expiryDate, status } = req.body;
-    if (quantity < 0) return res.status(400).json({ message: 'Negative stock not allowed' });
-    if (!medicine || !expiryDate) return res.status(400).json({ message: 'Invalid medicine or date' });
-    const stockId = generateId('STK');
-    const stock = await Stock.create({ stockId, hospitalId: req.facility._id, medicine, quantity, expiryDate, status });
-    res.status(201).json(stock);
-  } catch (err) { res.status(500).json({ message: err.message }); }
+const fail = (message, statusCode, error) => {
+  const problem = new Error(message);
+  problem.statusCode = statusCode;
+  problem.error = error;
+  return problem;
 };
 
-exports.getMyStock = async (req, res) => {
-  try {
-    const stocks = await Stock.find({ hospitalId: req.facility._id });
-    res.json(stocks);
-  } catch (err) { res.status(500).json({ message: err.message }); }
+const stockData = (body, hospitalId) => ({
+  stockId: typeof body.stockId === "string" ? body.stockId.trim() : body.stockId,
+  hospitalId,
+  medicine: normalizeMedicine(body.medicine),
+  quantity: body.quantity,
+  location: typeof body.location === "string" ? body.location.trim() : body.location,
+  province: typeof body.province === "string" ? body.province.trim() : body.province,
+  expiryDate: body.expiryDate,
+  status: body.status || "available",
+});
+
+const validateStock = (body) => {
+  if (!body.stockId || !body.medicine) throw fail("stockId and medicine are required", 400, "INVALID_STOCK");
+  if (!Number.isFinite(Number(body.quantity)) || Number(body.quantity) < 0) throw fail("quantity cannot be negative", 400, "INVALID_QUANTITY");
+  if (!body.location || !body.province) throw fail("location and province are required", 400, "INVALID_STOCK");
+  if (!body.expiryDate || Number.isNaN(Date.parse(body.expiryDate))) throw fail("expiryDate must be a valid date", 400, "INVALID_EXPIRY_DATE");
+  if (body.status && !["available", "unavailable"].includes(body.status)) throw fail("Invalid stock status", 400, "INVALID_STATUS");
 };
 
-exports.getAvailableStock = async (req, res) => {
-  try {
-    const stocks = await Stock.find({ status: 'AVAILABLE', quantity: { $gt: 0 }, expiryDate: { $gt: new Date() } }).populate('hospitalId', '-password');
-    res.json(stocks);
-  } catch (err) { res.status(500).json({ message: err.message }); }
+const findStock = async (id) => {
+  const byStockId = await Stock.findOne({ stockId: id });
+  if (byStockId || !mongoose.isValidObjectId(id)) return byStockId;
+  return Stock.findById(id);
 };
 
-exports.getStockById = async (req, res) => {
+const send = (res, statusCode, data, message = "Operation successful") =>
+  res.status(statusCode).json({ success: true, data, message });
+
+const createStock = async (req, res, next) => {
   try {
-    const stock = await Stock.findById(req.params.id);
-    if (!stock) return res.status(404).json({ message: 'Stock not found' });
-    res.json(stock);
-  } catch (err) { res.status(500).json({ message: err.message }); }
+    const body = { ...req.body, hospitalId: req.user.hospitalId };
+    validateStock(body);
+    const hospital = await Hospital.findOne({ hospitalId: req.user.hospitalId });
+    if (!hospital) throw fail("Hospital not found", 404, "HOSPITAL_NOT_FOUND");
+    const stock = await Stock.create(stockData(body, req.user.hospitalId));
+    return send(res, 201, stock);
+  } catch (error) { return next(error); }
 };
 
-exports.updateStock = async (req, res) => {
-  try {
-    const stock = await Stock.findById(req.params.id);
-    if (!stock) return res.status(404).json({ message: 'Stock not found' });
-    if (stock.hospitalId.toString() !== req.facility._id.toString()) return res.status(403).json({ message: 'Unauthorized to modify this stock' });
-    const { quantity } = req.body;
-    if (quantity !== undefined && quantity < 0) return res.status(400).json({ message: 'Negative stock not allowed' });
-    const updated = await Stock.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    res.json(updated);
-  } catch (err) { res.status(500).json({ message: err.message }); }
+const getMyStock = async (req, res, next) => {
+  try { return send(res, 200, await Stock.find({ hospitalId: req.user.hospitalId }).sort({ createdAt: -1 })); }
+  catch (error) { return next(error); }
 };
 
-exports.updateStockStatus = async (req, res) => {
+const getAvailableStock = async (req, res, next) => {
   try {
-    const stock = await Stock.findById(req.params.id);
-    if (!stock) return res.status(404).json({ message: 'Stock not found' });
-    if (stock.hospitalId.toString() !== req.facility._id.toString()) return res.status(403).json({ message: 'Unauthorized' });
-    const { status } = req.body;
-    if (!['AVAILABLE', 'UNAVAILABLE'].includes(status)) return res.status(400).json({ message: 'Invalid status' });
-    stock.status = status;
+    return send(res, 200, await Stock.find({ status: "available", quantity: { $gt: 0 }, expiryDate: { $gte: new Date() } }).sort({ expiryDate: 1 }));
+  } catch (error) { return next(error); }
+};
+
+const getStock = async (req, res, next) => {
+  try {
+    const stock = await findStock(req.params.id);
+    if (!stock) throw fail("Stock not found", 404, "STOCK_NOT_FOUND");
+    return send(res, 200, stock);
+  } catch (error) { return next(error); }
+};
+
+const updateStock = async (req, res, next) => {
+  try {
+    const stock = await findStock(req.params.id);
+    if (!stock) throw fail("Stock not found", 404, "STOCK_NOT_FOUND");
+    if (stock.hospitalId !== req.user.hospitalId) throw fail("You are not authorized to modify this stock", 403, "STOCK_OWNERSHIP_DENIED");
+    const body = { ...req.body, hospitalId: req.user.hospitalId, stockId: stock.stockId };
+    validateStock(body);
+    Object.assign(stock, stockData(body, req.user.hospitalId));
     await stock.save();
-    res.json(stock);
-  } catch (err) { res.status(500).json({ message: err.message }); }
+    return send(res, 200, stock);
+  } catch (error) { return next(error); }
 };
 
-exports.deleteStock = async (req, res) => {
+const updateStockStatus = async (req, res, next) => {
   try {
-    const stock = await Stock.findById(req.params.id);
-    if (!stock) return res.status(404).json({ message: 'Stock not found' });
-    if (stock.hospitalId.toString() !== req.facility._id.toString()) return res.status(403).json({ message: 'Unauthorized' });
-    await Stock.findByIdAndDelete(req.params.id);
-    res.json({ message: 'Stock deleted' });
-  } catch (err) { res.status(500).json({ message: err.message }); }
+    const stock = await findStock(req.params.id);
+    if (!stock) throw fail("Stock not found", 404, "STOCK_NOT_FOUND");
+    if (stock.hospitalId !== req.user.hospitalId) throw fail("You are not authorized to modify this stock", 403, "STOCK_OWNERSHIP_DENIED");
+    if (!["available", "unavailable"].includes(req.body.status)) throw fail("Invalid stock status", 400, "INVALID_STATUS");
+    stock.status = req.body.status;
+    await stock.save();
+    return send(res, 200, stock);
+  } catch (error) { return next(error); }
 };
+
+const deleteStock = async (req, res, next) => {
+  try {
+    const stock = await findStock(req.params.id);
+    if (!stock) throw fail("Stock not found", 404, "STOCK_NOT_FOUND");
+    if (stock.hospitalId !== req.user.hospitalId) throw fail("You are not authorized to modify this stock", 403, "STOCK_OWNERSHIP_DENIED");
+    await stock.deleteOne();
+    return send(res, 200, { stockId: stock.stockId }, "Stock deleted successfully");
+  } catch (error) { return next(error); }
+};
+
+module.exports = { createStock, getMyStock, getAvailableStock, getStock, updateStock, updateStockStatus, deleteStock };

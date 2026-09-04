@@ -1,13 +1,13 @@
-const express = require('express');
-const router = express.Router();
-const { createOffer, getMyOffers, getOffersForRequest, acceptOffer, rejectOffer, cancelOffer } = require('../controllers/offerController');
-const { protect } = require('../middleware/auth');
+const express = require("express");
+const offerController = require("../controllers/offerController");
+const { authenticate } = require("../middleware/authMiddleware");
 
-router.post('/', protect, createOffer);
-router.get('/my', protect, getMyOffers);
-router.get('/requests/:requestId/offers', protect, getOffersForRequest);
-router.patch('/:id/accept', protect, acceptOffer);
-router.patch('/:id/reject', protect, rejectOffer);
-router.patch('/:id/cancel', protect, cancelOffer);
+const router = express.Router();
+router.use(authenticate);
+router.post("/", offerController.createOffer);
+router.get("/my", offerController.getMyOffers);
+router.patch("/:id/accept", offerController.acceptOffer);
+router.patch("/:id/reject", offerController.rejectOffer);
+router.patch("/:id/cancel", offerController.cancelOffer);
 
 module.exports = router;

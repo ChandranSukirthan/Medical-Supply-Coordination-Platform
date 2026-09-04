@@ -1,13 +1,17 @@
-const express = require('express');
-const router = express.Router();
-const { createRequest, getOpenRequests, getMyRequests, getRequestById, updateRequest, cancelRequest } = require('../controllers/requestController');
-const { protect } = require('../middleware/auth');
+const express = require("express");
+const requestController = require("../controllers/requestController");
+const offerController = require("../controllers/offerController");
+const { authenticate, requireHospitalOwnership } = require("../middleware/authMiddleware");
 
-router.post('/', protect, createRequest);
-router.get('/open', protect, getOpenRequests);
-router.get('/my', protect, getMyRequests);
-router.get('/:id', protect, getRequestById);
-router.put('/:id', protect, updateRequest);
-router.patch('/:id/cancel', protect, cancelRequest);
+const router = express.Router();
+router.use(authenticate);
+router.post("/", requireHospitalOwnership, requestController.createRequest);
+router.get("/open", requestController.getOpenRequests);
+router.get("/my", requestController.getMyRequests);
+router.get("/:requestId/offers", offerController.getRequestOffers);
+router.get("/:requestId/matches", offerController.getEligibleSuppliers);
+router.get("/:id", requestController.getRequest);
+router.put("/:id", requireHospitalOwnership, requestController.updateRequest);
+router.patch("/:id/cancel", requireHospitalOwnership, requestController.cancelRequest);
 
 module.exports = router;

@@ -1,62 +1,96 @@
-const Request = require('../models/Request');
-const { generateId } = require('../utils/helpers');
+const mongoose = require("mongoose");
+const Hospital = require("../models/Hospital");
+const MedicineRequest = require("../models/MedicineRequest");
+const { normalizeMedicine } = require("../utils/medicine");
 
-exports.createRequest = async (req, res) => {
-  try {
-    const { medicine, quantity, urgency, location, province, requiredBy } = req.body;
-    if (!medicine || quantity <= 0 || !['LOW', 'MEDIUM', 'HIGH'].includes(urgency) || !requiredBy) {
-      return res.status(400).json({ message: 'Invalid request data' });
-    }
-    const requestId = generateId('REQ');
-    const newReq = await Request.create({ requestId, hospitalId: req.facility._id, medicine, quantity, urgency, location, province, requiredBy });
-    res.status(201).json(newReq);
-  } catch (err) { res.status(500).json({ message: err.message }); }
+const fail = (message, statusCode, error) => {
+  const problem = new Error(message);
+  problem.statusCode = statusCode;
+  problem.error = error;
+  return problem;
 };
 
-exports.getOpenRequests = async (req, res) => {
-  try {
-    const requests = await Request.find({ status: 'OPEN' }).populate('hospitalId', '-password');
-    res.json(requests);
-  } catch (err) { res.status(500).json({ message: err.message }); }
+const requestData = (body, hospitalId) => ({
+  requestId: typeof body.requestId === "string" ? body.requestId.trim() : body.requestId,
+  hospitalId,
+  medicine: normalizeMedicine(body.medicine),
+  quantity: body.quantity,
+  urgency: body.urgency,
+  location: typeof body.location === "string" ? body.location.trim() : body.location,
+  province: typeof body.province === "string" ? body.province.trim() : body.province,
+  requiredBy: body.requiredBy,
+  status: body.status || "open",
+});
+
+const validateRequest = (body) => {
+  if (!body.requestId || !body.medicine) throw fail("requestId and medicine are required", 400, "INVALID_REQUEST");
+  if (!Number.isInteger(Number(body.quantity)) || Number(body.quantity) <= 0) throw fail("quantity must be greater than zero", 400, "INVALID_QUANTITY");
+  if (!["LOW", "MEDIUM", "HIGH"].includes(body.urgency)) throw fail("urgency must be LOW, MEDIUM or HIGH", 400, "INVALID_URGENCY");
+  if (!body.location || !body.province) throw fail("location and province are required", 400, "INVALID_REQUEST");
+  if (!body.requiredBy || Number.isNaN(Date.parse(body.requiredBy))) throw fail("requiredBy must be a valid date", 400, "INVALID_REQUIRED_BY");
+  if (body.status && !["open", "cancelled"].includes(body.status)) throw fail("Invalid request status", 400, "INVALID_STATUS");
 };
 
-exports.getMyRequests = async (req, res) => {
-  try {
-    const requests = await Request.find({ hospitalId: req.facility._id });
-    res.json(requests);
-  } catch (err) { res.status(500).json({ message: err.message }); }
+const findRequest = async (id) => {
+  const byRequestId = await MedicineRequest.findOne({ requestId: id });
+  if (byRequestId || !mongoose.isValidObjectId(id)) return byRequestId;
+  return MedicineRequest.findById(id);
 };
 
-exports.getRequestById = async (req, res) => {
+const send = (res, statusCode, data, message = "Operation successful") =>
+  res.status(statusCode).json({ success: true, data, message });
+
+const createRequest = async (req, res, next) => {
   try {
-    const request = await Request.findById(req.params.id);
-    if (!request) return res.status(404).json({ message: 'Request not found' });
-    res.json(request);
-  } catch (err) { res.status(500).json({ message: err.message }); }
+    const body = { ...req.body, hospitalId: req.user.hospitalId };
+    validateRequest(body);
+    if (!(await Hospital.exists({ hospitalId: req.user.hospitalId }))) throw fail("Hospital not found", 404, "HOSPITAL_NOT_FOUND");
+    const request = await MedicineRequest.create(requestData(body, req.user.hospitalId));
+    return send(res, 201, request);
+  } catch (error) { return next(error); }
 };
 
-exports.updateRequest = async (req, res) => {
-  try {
-    const request = await Request.findById(req.params.id);
-    if (!request) return res.status(404).json({ message: 'Request not found' });
-    if (request.hospitalId.toString() !== req.facility._id.toString()) return res.status(403).json({ message: 'Unauthorized' });
-    
-    if (req.body.quantity !== undefined && req.body.quantity <= 0) return res.status(400).json({ message: 'Invalid quantity' });
-    if (req.body.urgency && !['LOW', 'MEDIUM', 'HIGH'].includes(req.body.urgency)) return res.status(400).json({ message: 'Invalid urgency' });
-    
-    const updated = await Request.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    res.json(updated);
-  } catch (err) { res.status(500).json({ message: err.message }); }
+const getOpenRequests = async (req, res, next) => {
+  try { return send(res, 200, await MedicineRequest.find({ status: "open", requiredBy: { $gte: new Date() } }).sort({ urgency: -1, requiredBy: 1 })); }
+  catch (error) { return next(error); }
 };
 
-exports.cancelRequest = async (req, res) => {
+const getMyRequests = async (req, res, next) => {
+  try { return send(res, 200, await MedicineRequest.find({ hospitalId: req.user.hospitalId }).sort({ createdAt: -1 })); }
+  catch (error) { return next(error); }
+};
+
+const getRequest = async (req, res, next) => {
   try {
-    const request = await Request.findById(req.params.id);
-    if (!request) return res.status(404).json({ message: 'Request not found' });
-    if (request.hospitalId.toString() !== req.facility._id.toString()) return res.status(403).json({ message: 'Unauthorized' });
-    
-    request.status = 'CANCELLED';
+    const request = await findRequest(req.params.id);
+    if (!request) throw fail("Request not found", 404, "REQUEST_NOT_FOUND");
+    return send(res, 200, request);
+  } catch (error) { return next(error); }
+};
+
+const updateRequest = async (req, res, next) => {
+  try {
+    const request = await findRequest(req.params.id);
+    if (!request) throw fail("Request not found", 404, "REQUEST_NOT_FOUND");
+    if (request.hospitalId !== req.user.hospitalId) throw fail("You are not authorized to modify this request", 403, "REQUEST_OWNERSHIP_DENIED");
+    if (request.status === "cancelled") throw fail("Cancelled requests cannot be edited", 409, "REQUEST_CANCELLED");
+    const body = { ...req.body, hospitalId: req.user.hospitalId, requestId: request.requestId, status: "open" };
+    validateRequest(body);
+    Object.assign(request, requestData(body, req.user.hospitalId));
     await request.save();
-    res.json(request);
-  } catch (err) { res.status(500).json({ message: err.message }); }
+    return send(res, 200, request);
+  } catch (error) { return next(error); }
 };
+
+const cancelRequest = async (req, res, next) => {
+  try {
+    const request = await findRequest(req.params.id);
+    if (!request) throw fail("Request not found", 404, "REQUEST_NOT_FOUND");
+    if (request.hospitalId !== req.user.hospitalId) throw fail("You are not authorized to modify this request", 403, "REQUEST_OWNERSHIP_DENIED");
+    request.status = "cancelled";
+    await request.save();
+    return send(res, 200, request, "Request cancelled successfully");
+  } catch (error) { return next(error); }
+};
+
+module.exports = { createRequest, getOpenRequests, getMyRequests, getRequest, updateRequest, cancelRequest };

@@ -1,14 +1,15 @@
-const express = require('express');
-const router = express.Router();
-const { createStock, getMyStock, getAvailableStock, getStockById, updateStock, updateStockStatus, deleteStock } = require('../controllers/stockController');
-const { protect } = require('../middleware/auth');
+const express = require("express");
+const stockController = require("../controllers/stockController");
+const { authenticate, requireHospitalOwnership } = require("../middleware/authMiddleware");
 
-router.post('/', protect, createStock);
-router.get('/my', protect, getMyStock);
-router.get('/available', protect, getAvailableStock);
-router.get('/:id', protect, getStockById);
-router.put('/:id', protect, updateStock);
-router.patch('/:id/status', protect, updateStockStatus);
-router.delete('/:id', protect, deleteStock);
+const router = express.Router();
+router.use(authenticate);
+router.post("/", requireHospitalOwnership, stockController.createStock);
+router.get("/my", stockController.getMyStock);
+router.get("/available", stockController.getAvailableStock);
+router.get("/:id", stockController.getStock);
+router.put("/:id", requireHospitalOwnership, stockController.updateStock);
+router.patch("/:id/status", requireHospitalOwnership, stockController.updateStockStatus);
+router.delete("/:id", stockController.deleteStock);
 
 module.exports = router;
