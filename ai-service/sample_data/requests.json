@@ -1,0 +1,113 @@
+[
+  {
+    "requestId": "REQ001",
+    "hospitalId": "H010",
+    "medicine": "Insulin",
+    "quantity": 80,
+    "urgency": "HIGH",
+    "location": "Matara",
+    "province": "Southern",
+    "requiredBy": "2026-09-15",
+    "status": "open"
+  },
+  {
+    "requestId": "REQ002",
+    "hospitalId": "H004",
+    "medicine": "Insulin",
+    "quantity": 200,
+    "urgency": "MEDIUM",
+    "location": "Jaffna",
+    "province": "Northern",
+    "requiredBy": "2026-09-25",
+    "status": "open"
+  },
+  {
+    "requestId": "REQ003",
+    "hospitalId": "H007",
+    "medicine": "Paracetamol",
+    "quantity": 300,
+    "urgency": "LOW",
+    "location": "Anuradhapura",
+    "province": "North Central",
+    "requiredBy": "2026-10-01",
+    "status": "open"
+  },
+  {
+    "requestId": "REQ004",
+    "hospitalId": "H008",
+    "medicine": "Amoxicillin",
+    "quantity": 100,
+    "urgency": "HIGH",
+    "location": "Batticaloa",
+    "province": "Eastern",
+    "requiredBy": "2026-09-12",
+    "status": "open"
+  },
+  {
+    "requestId": "REQ005",
+    "hospitalId": "H009",
+    "medicine": "Metformin",
+    "quantity": 150,
+    "urgency": "MEDIUM",
+    "location": "Ratnapura",
+    "province": "Sabaragamuwa",
+    "requiredBy": "2026-09-20",
+    "status": "open"
+  },
+  {
+    "requestId": "REQ006",
+    "hospitalId": "H006",
+    "medicine": "Insulin",
+    "quantity": 50,
+    "urgency": "HIGH",
+    "location": "Kurunegala",
+    "province": "North Western",
+    "requiredBy": "2026-09-10",
+    "status": "open"
+  },
+  {
+    "requestId": "REQ007",
+    "hospitalId": "H003",
+    "medicine": "Paracetamol",
+    "quantity": 400,
+    "urgency": "MEDIUM",
+    "location": "Galle",
+    "province": "Southern",
+    "requiredBy": "2026-09-18",
+    "status": "open"
+  },
+  {
+    "requestId": "REQ008",
+    "hospitalId": "H005",
+    "medicine": "Amoxicillin",
+    "quantity": 60,
+    "urgency": "LOW",
+    "location": "Negombo",
+    "province": "Western",
+    "requiredBy": "2026-10-05",
+    "status": "open"
+  },
+  {
+    "requestId": "REQ009",
+    "hospitalId": "H002",
+    "medicine": "Insulin",
+    "quantity": 30,
+    "urgency": "HIGH",
+    "location": "Kandy",
+    "province": "Central",
+    "requiredBy": "2026-09-08",
+    "status": "cancelled"
+  },
+  {
+    "requestId": "REQ010",
+    "hospitalId": "H001",
+    "medicine": "Metformin",
+    "quantity": 200,
+    "urgency": "LOW",
+    "location": "Colombo",
+    "province": "Western",
+    "requiredBy": "2026-10-15",
+    "status": "open"
+  }
+]
+
