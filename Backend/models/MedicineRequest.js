@@ -10,7 +10,7 @@ const medicineRequestSchema = new mongoose.Schema(
     location: { type: String, required: true, trim: true },
     province: { type: String, required: true, trim: true },
     requiredBy: { type: Date, required: true },
-    status: { type: String, enum: ["open", "cancelled"], default: "open", index: true },
+    status: { type: String, enum: ["open", "accepted", "completed", "cancelled"], default: "open", index: true },
   },
   { timestamps: true }
 );

@@ -3,6 +3,8 @@ const mongoose = require("mongoose");
 const Hospital = require("../models/Hospital");
 const MedicineRequest = require("../models/MedicineRequest");
 const Offer = require("../models/Offer");
+const Stock = require("../models/Stock");
+const Transaction = require("../models/Transaction");
 const { normalizeMedicine } = require("../utils/medicine");
 const { getAvailableQuantity, findEligibleSuppliers } = require("../services/matchingService");
 
@@ -22,10 +24,14 @@ const findRequest = async (id) => {
   return MedicineRequest.findById(id);
 };
 
-const findOffer = async (id) => {
-  const offer = await Offer.findOne({ offerId: id });
+const findOffer = async (id, session) => {
+  const query = Offer.findOne({ offerId: id });
+  if (session) query.session(session);
+  const offer = await query;
   if (offer || !mongoose.isValidObjectId(id)) return offer;
-  return Offer.findById(id);
+  const byId = Offer.findById(id);
+  if (session) byId.session(session);
+  return byId;
 };
 
 const validateOffer = (body) => {
@@ -103,4 +109,67 @@ const getEligibleSuppliers = async (req, res, next) => {
   } catch (error) { return next(error); }
 };
 
-module.exports = { createOffer, getMyOffers, getRequestOffers, acceptOffer: updateStatus("accepted"), rejectOffer: updateStatus("rejected"), cancelOffer: updateStatus("cancelled"), getEligibleSuppliers };
+const acceptOffer = async (req, res, next) => {
+  const session = await mongoose.startSession();
+  try {
+    let transaction;
+    await session.withTransaction(async () => {
+      const offer = await findOffer(req.params.id, session);
+      if (!offer) throw fail("Offer not found", 404, "OFFER_NOT_FOUND");
+      const request = await MedicineRequest.findOne({ requestId: offer.requestId }).session(session);
+      if (!request) throw fail("Request not found", 404, "REQUEST_NOT_FOUND");
+      if (request.hospitalId !== req.user.hospitalId) throw fail("Only the requesting hospital can accept this offer", 403, "REQUEST_OWNERSHIP_DENIED");
+      if (request.status !== "open") throw fail("This request is no longer open", 409, "REQUEST_NOT_OPEN");
+      if (offer.status !== "pending") throw fail("Only pending offers can be accepted", 409, "OFFER_NOT_PENDING");
+
+      const claimedRequest = await MedicineRequest.updateOne(
+        { _id: request._id, status: "open" },
+        { $set: { status: "accepted" } },
+        { session }
+      );
+      if (claimedRequest.modifiedCount !== 1) throw fail("Another offer has already been accepted", 409, "REQUEST_ALREADY_ACCEPTED");
+
+      let remaining = offer.quantityOffered;
+      const stocks = await Stock.find({
+        hospitalId: offer.supplierHospitalId,
+        medicine: offer.medicine,
+        status: "available",
+        expiryDate: { $gte: new Date() },
+        $expr: { $gt: [{ $subtract: ["$quantity", { $ifNull: ["$reservedQuantity", 0] }] }, 0] },
+      }).sort({ expiryDate: 1 }).session(session);
+      const allocations = [];
+      for (const stock of stocks) {
+        if (remaining <= 0) break;
+        const available = stock.quantity - (stock.reservedQuantity || 0);
+        const amount = Math.min(remaining, available);
+        const reserved = await Stock.updateOne(
+          { _id: stock._id, $expr: { $gte: [{ $subtract: ["$quantity", { $ifNull: ["$reservedQuantity", 0] }] }, amount] } },
+          { $inc: { reservedQuantity: amount } },
+          { session }
+        );
+        if (reserved.modifiedCount === 1) {
+          allocations.push({ stockId: stock.stockId, quantity: amount });
+          remaining -= amount;
+        }
+      }
+      if (remaining > 0) throw fail("Insufficient current stock", 409, "INSUFFICIENT_STOCK");
+
+      [transaction] = await Transaction.create([{
+        transactionId: crypto.randomUUID(),
+        requestId: request.requestId,
+        offerId: offer.offerId,
+        supplierHospitalId: offer.supplierHospitalId,
+        recipientHospitalId: request.hospitalId,
+        medicine: offer.medicine,
+        quantity: offer.quantityOffered,
+        status: "pending",
+        stockAllocations: allocations,
+      }], { session });
+      await Offer.updateOne({ _id: offer._id, status: "pending" }, { $set: { status: "accepted" } }, { session });
+      await Offer.updateMany({ requestId: request.requestId, _id: { $ne: offer._id }, status: "pending" }, { $set: { status: "cancelled" } }, { session });
+    });
+    return send(res, 201, transaction, "Offer accepted and transaction created");
+  } catch (error) { return next(error); } finally { await session.endSession(); }
+};
+
+module.exports = { createOffer, getMyOffers, getRequestOffers, acceptOffer, rejectOffer: updateStatus("rejected"), cancelOffer: updateStatus("cancelled"), getEligibleSuppliers };

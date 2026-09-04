@@ -7,9 +7,13 @@ import {
   Search, 
   ArrowLeftRight 
 } from 'lucide-react';
+import { useAuth } from '../AuthContext';
 
 const Home = () => {
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
+  const targetRoute = isAuthenticated ? '/dashboard' : '/login';
+
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 selection:bg-[#0d3c4b] selection:text-white">
       {/* Header */}
@@ -29,8 +33,8 @@ const Home = () => {
             
             {/* Action */}
             <div>
-              <button onClick={() => navigate('/login')} className="bg-[#0d3c4b] hover:bg-[#092a35] text-white px-6 py-2.5 rounded-md text-sm font-semibold transition-all shadow-sm flex items-center gap-2">
-                Facility Login <ArrowRight className="w-4 h-4" />
+              <button onClick={() => navigate(targetRoute)} className="bg-[#0d3c4b] hover:bg-[#092a35] text-white px-6 py-2.5 rounded-md text-sm font-semibold transition-all shadow-sm flex items-center gap-2">
+                {isAuthenticated ? 'Open Dashboard' : 'Facility Login'} <ArrowRight className="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -57,11 +61,11 @@ const Home = () => {
             </p>
             
             <div className="flex flex-col sm:flex-row gap-4">
-              <button onClick={() => navigate('/login')} className="bg-[#0d3c4b] hover:bg-[#092a35] text-white px-8 py-4 rounded-md text-base font-bold transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2">
+              <button onClick={() => navigate(targetRoute)} className="bg-[#0d3c4b] hover:bg-[#092a35] text-white px-8 py-4 rounded-md text-base font-bold transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2">
                 Access the Network <ArrowRight className="w-5 h-5" />
               </button>
-              <button onClick={() => navigate('/login')} className="bg-white border-2 border-slate-200 hover:border-slate-300 text-slate-700 px-8 py-4 rounded-md text-base font-bold transition-all flex items-center justify-center">
-                Explore Provincial Data
+              <button onClick={() => navigate(isAuthenticated ? '/match-supply' : '/login')} className="bg-white border-2 border-slate-200 hover:border-slate-300 text-slate-700 px-8 py-4 rounded-md text-base font-bold transition-all flex items-center justify-center">
+                Explore Available Stock
               </button>
             </div>
           </div>

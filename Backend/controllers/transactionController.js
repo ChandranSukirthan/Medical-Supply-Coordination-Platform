@@ -1,114 +1,83 @@
-const Transaction = require('../models/Transaction');
-const Offer = require('../models/Offer');
-const Request = require('../models/Request');
-const Stock = require('../models/Stock');
-const { generateId } = require('../utils/helpers');
+const mongoose = require("mongoose");
+const Transaction = require("../models/Transaction");
+const Stock = require("../models/Stock");
+const Offer = require("../models/Offer");
+const MedicineRequest = require("../models/MedicineRequest");
 
-exports.getMyTransactions = async (req, res) => {
+const fail = (message, statusCode, error) => Object.assign(new Error(message), { statusCode, error });
+const send = (res, statusCode, data, message = "Operation successful") => res.status(statusCode).json({ success: true, data, message });
+const findTransaction = async (id, session) => {
+  const query = Transaction.findOne({ transactionId: id });
+  if (session) query.session(session);
+  const transaction = await query;
+  if (transaction || !mongoose.isValidObjectId(id)) return transaction;
+  const byId = Transaction.findById(id);
+  if (session) byId.session(session);
+  return byId;
+};
+
+const ownedBy = (transaction, hospitalId) => transaction.supplierHospitalId === hospitalId || transaction.recipientHospitalId === hospitalId;
+
+const getMyTransactions = async (req, res, next) => {
+  try { return send(res, 200, await Transaction.find({ $or: [{ supplierHospitalId: req.user.hospitalId }, { recipientHospitalId: req.user.hospitalId }] }).sort({ createdAt: -1 })); }
+  catch (error) { return next(error); }
+};
+
+const getTransaction = async (req, res, next) => {
   try {
-    const transactions = await Transaction.find({
-      $or: [{ senderId: req.facility._id }, { receiverId: req.facility._id }]
+    const transaction = await findTransaction(req.params.id);
+    if (!transaction) throw fail("Transaction not found", 404, "TRANSACTION_NOT_FOUND");
+    if (!ownedBy(transaction, req.user.hospitalId)) throw fail("You are not authorized to view this transaction", 403, "TRANSACTION_ACCESS_DENIED");
+    return send(res, 200, transaction);
+  } catch (error) { return next(error); }
+};
+
+const updateTransaction = (action) => async (req, res, next) => {
+  const session = await mongoose.startSession();
+  try {
+    let result;
+    await session.withTransaction(async () => {
+      const transaction = await findTransaction(req.params.id, session);
+      if (!transaction) throw fail("Transaction not found", 404, "TRANSACTION_NOT_FOUND");
+      if (!ownedBy(transaction, req.user.hospitalId)) throw fail("You are not authorized to modify this transaction", 403, "TRANSACTION_ACCESS_DENIED");
+      const allowed = action === "start"
+        ? transaction.supplierHospitalId === req.user.hospitalId && transaction.status === "pending"
+        : action === "complete"
+          ? transaction.recipientHospitalId === req.user.hospitalId && transaction.status === "in_transfer"
+          : (transaction.status === "pending" || transaction.status === "in_transfer") && (transaction.supplierHospitalId === req.user.hospitalId || transaction.recipientHospitalId === req.user.hospitalId);
+      if (!allowed) throw fail("Invalid transaction state or authorization", 409, "INVALID_TRANSACTION_TRANSITION");
+
+      if (action === "complete") {
+        for (const allocation of transaction.stockAllocations) {
+          const updated = await Stock.findOneAndUpdate(
+            { stockId: allocation.stockId, hospitalId: transaction.supplierHospitalId, $expr: { $and: [{ $gte: ["$quantity", allocation.quantity] }, { $gte: [{ $ifNull: ["$reservedQuantity", 0] }, allocation.quantity] }] } },
+            { $inc: { quantity: -allocation.quantity, reservedQuantity: -allocation.quantity } },
+            { new: true, session }
+          );
+          if (!updated || updated.quantity < 0 || updated.reservedQuantity < 0) throw fail("Reserved stock is no longer available", 409, "STOCK_CONFLICT");
+        }
+        transaction.status = "completed";
+        transaction.completedAt = new Date();
+        await Offer.updateOne({ offerId: transaction.offerId }, { $set: { status: "completed" } }, { session });
+        await MedicineRequest.updateOne({ requestId: transaction.requestId }, { $set: { status: "completed" } }, { session });
+      } else if (action === "cancel") {
+        for (const allocation of transaction.stockAllocations) {
+          const released = await Stock.updateOne(
+            { stockId: allocation.stockId, hospitalId: transaction.supplierHospitalId, $expr: { $gte: [{ $ifNull: ["$reservedQuantity", 0] }, allocation.quantity] } },
+            { $inc: { reservedQuantity: -allocation.quantity } },
+            { session }
+          );
+          if (released.modifiedCount !== 1) throw fail("Reserved stock could not be released", 409, "STOCK_CONFLICT");
+        }
+        transaction.status = "cancelled";
+        await Offer.updateOne({ offerId: transaction.offerId }, { $set: { status: "cancelled" } }, { session });
+        await MedicineRequest.updateOne({ requestId: transaction.requestId }, { $set: { status: "open" } }, { session });
+      } else transaction.status = "in_transfer";
+      await transaction.save({ session });
+      result = transaction;
     });
-    res.json(transactions);
-  } catch (err) { res.status(500).json({ message: err.message }); }
+    return send(res, 200, result, `Transaction ${action}ed successfully`);
+  } catch (error) { return next(error); } finally { await session.endSession(); }
 };
 
-exports.getTransactionById = async (req, res) => {
-  try {
-    const tx = await Transaction.findById(req.params.id);
-    if (!tx) return res.status(404).json({ message: 'Transaction not found' });
-    if (tx.senderId.toString() !== req.facility._id.toString() && tx.receiverId.toString() !== req.facility._id.toString()) {
-      return res.status(403).json({ message: 'Unauthorized' });
-    }
-    res.json(tx);
-  } catch (err) { res.status(500).json({ message: err.message }); }
-};
-
-// Creating a transaction is an internal logical step after offer is accepted, but let's make an endpoint if React needs to trigger it
-exports.createTransaction = async (req, res) => {
-  try {
-    const { offerId } = req.body;
-    const offer = await Offer.findById(offerId).populate('requestId');
-    if (!offer || offer.status !== 'ACCEPTED') return res.status(400).json({ message: 'Valid accepted offer required' });
-    
-    // The receiver is the request's hospital, sender is the offer's supplier
-    const txId = generateId('TXN');
-    const tx = await Transaction.create({
-      transactionId: txId,
-      offerId: offer._id,
-      requestId: offer.requestId._id,
-      senderId: offer.supplierId,
-      receiverId: offer.requestId.hospitalId,
-      medicine: offer.requestId.medicine,
-      quantity: offer.quantity
-    });
-    res.status(201).json(tx);
-  } catch (err) { res.status(500).json({ message: err.message }); }
-};
-
-exports.startTransaction = async (req, res) => {
-  try {
-    const tx = await Transaction.findById(req.params.id);
-    if (!tx) return res.status(404).json({ message: 'Transaction not found' });
-    if (tx.senderId.toString() !== req.facility._id.toString()) return res.status(403).json({ message: 'Only sender can start transaction' });
-    if (tx.status !== 'PENDING') return res.status(400).json({ message: 'Invalid state transition' });
-    
-    tx.status = 'IN_TRANSIT';
-    await tx.save();
-    res.json(tx);
-  } catch (err) { res.status(500).json({ message: err.message }); }
-};
-
-exports.completeTransaction = async (req, res) => {
-  try {
-    const tx = await Transaction.findById(req.params.id);
-    if (!tx) return res.status(404).json({ message: 'Transaction not found' });
-    if (tx.receiverId.toString() !== req.facility._id.toString()) return res.status(403).json({ message: 'Only receiver can complete' });
-    if (tx.status !== 'IN_TRANSIT') return res.status(400).json({ message: 'Invalid state transition' });
-    
-    // Decrement sender stock
-    const stocks = await Stock.find({ hospitalId: tx.senderId, medicine: tx.medicine, status: 'AVAILABLE', quantity: { $gte: 1 } }).sort('expiryDate');
-    let qtyToDeduct = tx.quantity;
-    for (const st of stocks) {
-      if (qtyToDeduct <= 0) break;
-      if (st.quantity >= qtyToDeduct) {
-        st.quantity -= qtyToDeduct;
-        qtyToDeduct = 0;
-        await st.save();
-      } else {
-        qtyToDeduct -= st.quantity;
-        st.quantity = 0;
-        await st.save();
-      }
-    }
-    if (qtyToDeduct > 0) {
-      return res.status(400).json({ message: 'Insufficient stock available in sender inventory' });
-    }
-    
-    // Fulfill Request
-    const reqDoc = await Request.findById(tx.requestId);
-    if (reqDoc) {
-      reqDoc.status = 'FULFILLED';
-      await reqDoc.save();
-    }
-    
-    tx.status = 'COMPLETED';
-    await tx.save();
-    res.json(tx);
-  } catch (err) { res.status(500).json({ message: err.message }); }
-};
-
-exports.cancelTransaction = async (req, res) => {
-  try {
-    const tx = await Transaction.findById(req.params.id);
-    if (!tx) return res.status(404).json({ message: 'Transaction not found' });
-    if (tx.senderId.toString() !== req.facility._id.toString() && tx.receiverId.toString() !== req.facility._id.toString()) {
-      return res.status(403).json({ message: 'Unauthorized' });
-    }
-    if (tx.status === 'COMPLETED' || tx.status === 'CANCELLED') return res.status(400).json({ message: 'Invalid state transition' });
-    
-    tx.status = 'CANCELLED';
-    await tx.save();
-    res.json(tx);
-  } catch (err) { res.status(500).json({ message: err.message }); }
-};
+module.exports = { getMyTransactions, getTransaction, startTransaction: updateTransaction("start"), completeTransaction: updateTransaction("complete"), cancelTransaction: updateTransaction("cancel") };

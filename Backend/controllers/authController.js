@@ -40,9 +40,12 @@ const publicHospital = (hospital) => ({
 const publicUser = (user, hospital) => ({
   userId: user.userId,
   hospitalId: user.hospitalId,
+  name: hospital ? hospital.name : user.hospitalId,
   email: user.email,
   role: user.role,
-  hospital: publicHospital(hospital),
+  location: hospital ? hospital.location : "",
+  province: hospital ? hospital.province : "",
+  hospital: hospital ? publicHospital(hospital) : null,
 });
 
 const register = async (req, res, next) => {
@@ -120,11 +123,7 @@ const login = async (req, res, next) => {
     return res.json({
       success: true,
       token,
-      user: {
-        hospitalId: user.hospitalId,
-        name: hospital.name,
-        email: user.email,
-      },
+      user: publicUser(user, hospital),
     });
   } catch (error) {
     return next(error);
@@ -145,4 +144,13 @@ const me = async (req, res, next) => {
   }
 };
 
-module.exports = { register, login, me };
+const getHospitals = async (req, res, next) => {
+  try {
+    const hospitals = await Hospital.find({}).sort({ name: 1 });
+    return res.json({ success: true, hospitals });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+module.exports = { register, login, me, getHospitals };

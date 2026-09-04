@@ -1,68 +1,116 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { 
-  Search, 
-  Bell, 
-  HelpCircle, 
   Building2, 
   ChevronDown,
   Plus,
-  User,
   ShieldAlert,
   PackageSearch,
   AlertCircle,
   AlertOctagon,
   Clock,
-  History,
   CheckSquare,
   Building,
   Send,
-  ArrowLeft
+  ArrowLeft,
+  CheckCircle2,
+  Loader2,
+  LogOut
 } from 'lucide-react';
+import api from '../api';
+import { useAuth } from '../AuthContext';
 
 const ReportShortage = () => {
   const navigate = useNavigate();
+  const { user, login, logout } = useAuth();
+  const [showProfile, setShowProfile] = useState(false);
+
+  const handleQuickSwitch = async (email, password) => {
+    try {
+      const { data } = await api.post('/auth/login', { email, password });
+      if (data.success) {
+        login(data.token, data.user);
+        window.location.reload();
+      }
+    } catch (err) {
+      alert('Failed to switch facility: ' + (err.response?.data?.message || err.message));
+    }
+  };
+
+  const handleSignOut = () => {
+    logout();
+    navigate('/login');
+  };
+
+  const [medicine, setMedicine] = useState('Surgical Gloves (Latex Size 7.5)');
+  const [currentQty, setCurrentQty] = useState(50);
+  const [requiredQty, setRequiredQty] = useState(500);
   const [selectedPriority, setSelectedPriority] = useState('Critical');
+  const [department, setDepartment] = useState('ICU & Emergency Operating Theatres (Theatres 1-4)');
+  const [runway, setRunway] = useState('< 24 Hours (Immediate critical shortage)');
+  const [notes, setNotes] = useState('Depleted stock in trauma theatre. Urgent reallocation required to maintain continuous operations.');
+  const [authorized, setAuthorized] = useState(true);
+
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [error, setError] = useState('');
 
   const priorities = [
-    {
-      id: 'Low',
-      title: 'Low',
-      description: 'Routine replenishment',
-      runway: 'Runway > 14 days',
-      color: 'bg-emerald-500',
-      borderColor: 'border-slate-200',
-      bgHover: 'hover:border-emerald-500'
-    },
-    {
-      id: 'Medium',
-      title: 'Medium',
-      description: 'Standard transfer',
-      runway: 'Runway 7-14 days',
-      color: 'bg-amber-500',
-      borderColor: 'border-slate-200',
-      bgHover: 'hover:border-amber-500'
-    },
-    {
-      id: 'High',
-      title: 'High',
-      description: 'Alert cluster hub',
-      runway: 'Runway 48-72 hours',
-      color: 'bg-orange-500',
-      borderColor: 'border-slate-200',
-      bgHover: 'hover:border-orange-500'
-    },
-    {
-      id: 'Critical',
-      title: 'Critical',
-      description: 'Immediate dispatch broadcast',
-      runway: 'Depletion < 24 hours',
-      color: 'bg-red-600',
-      borderColor: 'border-red-600',
-      bgHover: 'hover:border-red-600',
-      selectedBg: 'bg-red-50'
-    }
+    { id: 'Low', title: 'Low', apiVal: 'LOW', description: 'Routine replenishment', runway: 'Runway > 14 days', color: 'bg-emerald-500', borderColor: 'border-slate-200' },
+    { id: 'Medium', title: 'Medium', apiVal: 'MEDIUM', description: 'Standard transfer', runway: 'Runway 7-14 days', color: 'bg-amber-500', borderColor: 'border-slate-200' },
+    { id: 'High', title: 'High', apiVal: 'HIGH', description: 'Alert cluster hub', runway: 'Runway 48-72 hours', color: 'bg-orange-500', borderColor: 'border-slate-200' },
+    { id: 'Critical', title: 'Critical', apiVal: 'HIGH', description: 'Immediate dispatch', runway: 'Depletion < 24 hours', color: 'bg-red-600', borderColor: 'border-red-600', selectedBg: 'bg-red-50' }
   ];
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!authorized) {
+      setError('Please certify the clinical officer authorization.');
+      return;
+    }
+    if (!medicine.trim()) {
+      setError('Please specify the medical supply item.');
+      return;
+    }
+    if (Number(requiredQty) <= 0) {
+      setError('Quantity required must be at least 1 unit.');
+      return;
+    }
+
+    setError('');
+    setLoading(true);
+
+    try {
+      const requestId = `REQ-${Date.now().toString().slice(-6)}`;
+      const reqDate = new Date();
+      reqDate.setDate(reqDate.getDate() + (selectedPriority === 'Critical' ? 1 : 5));
+
+      const selectedPriorityObj = priorities.find(p => p.id === selectedPriority);
+
+      await api.post('/requests', {
+        requestId,
+        medicine: medicine.trim(),
+        quantity: Number(requiredQty),
+        urgency: selectedPriorityObj ? selectedPriorityObj.apiVal : 'HIGH',
+        location: user?.hospital?.location || user?.location || 'Jaffna',
+        province: user?.hospital?.province || user?.province || 'Northern',
+        requiredBy: reqDate.toISOString(),
+      });
+
+      setSuccess(true);
+      setTimeout(() => navigate('/dashboard'), 2200);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Could not record requisition in MongoDB.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deficit = Math.max(0, requiredQty - currentQty);
+  const hospitalName = user?.name || user?.hospital?.name || 'Your Facility';
+  const currentHospitalId = (user?.hospitalId || user?.hospital?.hospitalId || '').trim();
+  const hospitalId = currentHospitalId || '—';
+  const userEmail = user?.email || '';
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-12">
@@ -71,9 +119,8 @@ const ReportShortage = () => {
         <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             
-            {/* Left side - Logo & Nav */}
             <div className="flex items-center gap-8">
-              <div className="flex items-center gap-3">
+              <Link to="/" className="flex items-center gap-3">
                 <div className="w-8 h-8 bg-[#0d3c4b] rounded flex items-center justify-center">
                   <Plus className="w-5 h-5 text-white" />
                 </div>
@@ -81,120 +128,158 @@ const ReportShortage = () => {
                   <h1 className="text-lg font-bold text-[#0d3c4b] leading-tight">MedBridge LK</h1>
                   <p className="text-[10px] text-slate-500 font-medium tracking-wide uppercase">National Supply Coordination Hub</p>
                 </div>
-              </div>
+              </Link>
 
               <div className="hidden md:flex items-center space-x-1">
                 <Link to="/dashboard" className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900">Dashboard</Link>
                 <Link to="/report-shortage" className="px-4 py-2 text-sm font-semibold text-[#0d3c4b] border-b-2 border-[#0d3c4b]">Report Shortage</Link>
                 <Link to="/match-supply" className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900">Available Stock</Link>
-                <a href="#" className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900">Transfers</a>
               </div>
             </div>
 
-            {/* Right side - Search, Actions, Profile */}
-            <div className="flex items-center gap-4">
-              <div className="relative hidden lg:block w-64">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Search className="h-4 w-4 text-slate-400" />
+            <div className="relative">
+              <div 
+                onClick={() => setShowProfile(!showProfile)}
+                className="flex items-center gap-3 cursor-pointer hover:bg-slate-50 p-1.5 rounded-lg transition-colors"
+              >
+                <div className="hidden sm:block text-right">
+                  <p className="text-sm font-semibold text-slate-900">{hospitalName}</p>
+                  <p className="text-xs text-slate-500">ID: {hospitalId}</p>
                 </div>
-                <input 
-                  type="text" 
-                  className="block w-full pl-10 pr-3 py-2 border border-slate-200 rounded-md leading-5 bg-slate-50 placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-1 focus:ring-[#0d3c4b] focus:border-[#0d3c4b] sm:text-sm transition-colors" 
-                  placeholder="Search item, SKU or facility..." 
-                />
-              </div>
-
-              <button className="hidden sm:flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors shadow-sm">
-                <ShieldAlert className="w-4 h-4" />
-                + Emergency Request
-              </button>
-
-              <div className="flex items-center gap-3 border-l border-slate-200 pl-4 ml-2">
-                <button className="text-slate-400 hover:text-slate-600 relative">
-                  <Bell className="w-5 h-5" />
-                  <span className="absolute top-0 right-0 block h-2 w-2 rounded-full bg-red-500 ring-2 ring-white"></span>
-                </button>
-                <button className="text-slate-400 hover:text-slate-600">
-                  <HelpCircle className="w-5 h-5" />
-                </button>
-                
-                <div className="flex items-center gap-3 ml-2 cursor-pointer hover:bg-slate-50 p-1.5 rounded-md transition-colors">
-                  <div className="hidden sm:block text-right">
-                    <p className="text-sm font-semibold text-slate-900">Jaffna General Hospital</p>
-                    <p className="text-xs text-slate-500">Northern Province • Chief Pharmacist</p>
-                  </div>
-                  <div className="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center border border-slate-300">
-                    <User className="w-5 h-5 text-slate-500" />
-                  </div>
+                <div className="w-9 h-9 rounded-full bg-[#0d3c4b] flex items-center justify-center text-white font-bold text-sm shadow-sm">
+                  {hospitalName.charAt(0)}
                 </div>
               </div>
+
+              {showProfile && (
+                <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-xl border border-slate-200 z-50 overflow-hidden">
+                  <div className="px-4 py-4 border-b border-slate-100 bg-slate-50/50">
+                    <div className="flex items-center gap-3">
+                      <div className="w-11 h-11 rounded-full bg-[#0d3c4b] flex items-center justify-center text-white font-bold text-base shadow-sm">
+                        {hospitalName.charAt(0)}
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-slate-900">{hospitalName}</p>
+                        <p className="text-xs text-slate-500 font-medium">{userEmail || 'hospital_admin'}</p>
+                        <p className="text-[10px] text-slate-400 font-mono mt-0.5">Facility ID: {hospitalId}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Quick Facility Switcher */}
+                  <div className="p-2 border-b border-slate-100 bg-slate-50/40">
+                    <p className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Quick Switch Facility (Testing)</p>
+                    <button 
+                      onClick={() => handleQuickSwitch('sukirsukirthan347@gmail.com', 'password123')}
+                      className={`w-full text-left px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors ${currentHospitalId.toLowerCase() === 'jf001' ? 'bg-emerald-50 text-emerald-700 font-bold' : 'hover:bg-white text-slate-700'}`}
+                    >
+                      <span>Jaffna Hospital (JF001)</span>
+                      {currentHospitalId.toLowerCase() === 'jf001' && <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-bold">Active</span>}
+                    </button>
+                    <button 
+                      onClick={() => handleQuickSwitch('sukirthan@gmail.com', 'password123')}
+                      className={`w-full text-left px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors ${currentHospitalId.toLowerCase() === 'kk001' ? 'bg-emerald-50 text-emerald-700 font-bold' : 'hover:bg-white text-slate-700'}`}
+                    >
+                      <span>Kilionochchi Hospital (KK001)</span>
+                      {currentHospitalId.toLowerCase() === 'kk001' && <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-bold">Active</span>}
+                    </button>
+                  </div>
+
+                  <div className="p-2">
+                    <button 
+                      onClick={handleSignOut}
+                      className="w-full px-3 py-2 rounded-lg hover:bg-red-50 cursor-pointer transition-colors flex items-center gap-3 text-red-600 text-sm font-semibold"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      Sign Out
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
           </div>
         </div>
       </nav>
 
+      {/* Click outside to close profile */}
+      {showProfile && (
+        <div className="fixed inset-0 z-40" onClick={() => setShowProfile(false)}></div>
+      )}
+
       {/* Breadcrumbs */}
       <div className="max-w-4xl mx-auto px-4 mt-6 flex items-center text-sm text-slate-500 font-medium">
         <Link to="/dashboard" className="hover:text-[#0d3c4b] transition-colors">Dashboard</Link>
         <ChevronDown className="w-3.5 h-3.5 mx-2 -rotate-90 text-slate-400" />
-        <a href="#" className="hover:text-[#0d3c4b] transition-colors">Shortages</a>
-        <ChevronDown className="w-3.5 h-3.5 mx-2 -rotate-90 text-slate-400" />
-        <span className="text-slate-900 font-semibold">Report Supply Shortage</span>
+        <span className="text-slate-900 font-semibold">Report Supply Shortage (MongoDB Record)</span>
       </div>
 
       <main className="max-w-4xl mx-auto px-4 mt-4">
         
-        {/* Facility Metadata Banner */}
+        {/* Facility Context Banner */}
         <div className="bg-white border border-slate-200 rounded-lg p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 shadow-sm">
           <div className="flex items-start gap-3">
             <div className="mt-1">
               <Building2 className="w-5 h-5 text-slate-400" />
             </div>
             <div>
-              <p className="text-[10px] font-bold text-slate-500 tracking-wider uppercase mb-0.5">Reporting Facility Context</p>
+              <p className="text-[10px] font-bold text-slate-500 tracking-wider uppercase mb-0.5">Origin Facility Context</p>
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-slate-900">Jaffna General Hospital</h2>
+                <h2 className="text-base font-bold text-slate-900">{hospitalName}</h2>
                 <span className="text-slate-400">•</span>
-                <p className="text-sm text-slate-600 font-medium">Northern Province (Cluster 01)</p>
+                <p className="text-sm text-slate-600 font-medium">Facility ID: {hospitalId}</p>
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-3 text-sm">
-            <span className="text-slate-500 font-mono bg-slate-100 px-2.5 py-1 rounded border border-slate-200">
-              Facility ID: <span className="font-semibold text-slate-700">JGH-NP-01</span>
-            </span>
-            <div className="flex items-center gap-1.5 text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded border border-emerald-200 font-medium">
-              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-              MSD Network Live
-            </div>
+          <div className="flex items-center gap-1.5 text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded border border-emerald-200 font-medium text-xs">
+            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+            MongoDB Live Sync
           </div>
         </div>
 
+        {/* Success Alert */}
+        {success && (
+          <div className="mb-6 p-5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-3 text-emerald-800 shadow-sm">
+            <CheckCircle2 className="w-6 h-6 text-emerald-600 flex-shrink-0" />
+            <div>
+              <h4 className="font-bold text-sm">Requisition Logged to MongoDB!</h4>
+              <p className="text-xs text-emerald-700 mt-0.5">Your shortage notice has been recorded in the database. Redirecting to dashboard...</p>
+            </div>
+          </div>
+        )}
+
+        {/* Error Alert */}
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3 text-red-800">
+            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
+            <p className="text-sm font-semibold">{error}</p>
+          </div>
+        )}
+
         {/* Main Form Container */}
-        <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+        <form onSubmit={handleSubmit} className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
           
           {/* Form Header */}
           <div className="px-6 py-6 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
-              <h2 className="text-xl font-bold text-slate-900">Report Supply Shortage</h2>
-              <p className="text-sm text-slate-500 mt-1">Submit acute stock deficit data to trigger automated matching across provincial hospital reserves and MSD dispatch nodes.</p>
+              <h2 className="text-xl font-bold text-slate-900">Broadcast Supply Shortage</h2>
+              <p className="text-sm text-slate-500 mt-1">Saves directly to MongoDB and triggers national logistics dispatch matching.</p>
             </div>
             <div className="flex items-center gap-1.5 text-red-700 bg-red-50 border border-red-200 px-3 py-1.5 rounded-md text-xs font-bold uppercase tracking-wide">
               <AlertOctagon className="w-3.5 h-3.5" />
-              Triage Level Required
+              Triage Alert Level
             </div>
           </div>
 
           <div className="p-6 space-y-8">
             
-            {/* Select Supply Item */}
+            {/* Supply Item Input */}
             <div>
               <div className="flex justify-between items-end mb-2">
                 <label className="block text-sm font-semibold text-slate-900">
-                  Select Supply Item <span className="text-red-500">*</span>
+                  Supply Item / Medicine Catalog <span className="text-red-500">*</span>
                 </label>
-                <span className="text-xs text-slate-500 font-medium">Search by item name or MSD Code</span>
+                <span className="text-xs text-slate-500 font-medium">Standard MoH Classification</span>
               </div>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -202,68 +287,61 @@ const ReportShortage = () => {
                 </div>
                 <input 
                   type="text" 
-                  defaultValue="Surgical Gloves (Latex Size 7.5) - SL-MSD-SURG-7501"
-                  className="block w-full pl-10 pr-10 py-2.5 border border-slate-300 rounded-md text-sm text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-[#0d3c4b] focus:border-transparent transition-shadow" 
+                  value={medicine}
+                  onChange={(e) => setMedicine(e.target.value)}
+                  placeholder="e.g. Atropine Sulfate, Surgical Gloves, Insulin..."
+                  className="block w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-md text-sm text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-[#0d3c4b] focus:border-transparent transition-shadow" 
+                  required
                 />
-                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                  <ChevronDown className="h-4 w-4 text-slate-400" />
-                </div>
               </div>
-              <p className="text-xs text-slate-500 mt-2">Standard Ministry of Health item classification. Matching will scan Northern & North Central clusters first.</p>
             </div>
 
             {/* Quantities Row */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              {/* Current Quantity */}
               <div>
                 <div className="flex justify-between items-end mb-2">
                   <label className="block text-sm font-semibold text-slate-900">
-                    Current Quantity on Hand <span className="text-red-500">*</span>
+                    Current Quantity on Hand
                   </label>
-                  <span className="text-xs text-slate-500 font-medium">Physical stock count</span>
+                  <span className="text-xs text-slate-500 font-medium">Stock count</span>
                 </div>
-                <div className="relative">
-                  <input 
-                    type="number" 
-                    defaultValue="50"
-                    className="block w-full pl-4 pr-16 py-2.5 border border-slate-300 rounded-md text-sm text-slate-900 font-semibold focus:outline-none focus:ring-2 focus:ring-[#0d3c4b] focus:border-transparent transition-shadow" 
-                  />
-                  <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
-                    <span className="text-slate-400 text-sm font-medium">pairs</span>
-                  </div>
-                </div>
+                <input 
+                  type="number" 
+                  value={currentQty}
+                  min={0}
+                  onChange={(e) => setCurrentQty(Number(e.target.value))}
+                  className="block w-full px-4 py-2.5 border border-slate-300 rounded-md text-sm text-slate-900 font-semibold focus:outline-none focus:ring-2 focus:ring-[#0d3c4b] focus:border-transparent" 
+                />
               </div>
 
-              {/* Quantity Required */}
               <div>
                 <div className="flex justify-between items-end mb-2">
                   <label className="block text-sm font-semibold text-slate-900">
                     Quantity Required <span className="text-red-500">*</span>
                   </label>
-                  <span className="text-xs text-slate-500 font-medium">Buffer target</span>
+                  <span className="text-xs text-slate-500 font-medium">Deficit target</span>
                 </div>
-                <div className="relative">
-                  <input 
-                    type="number" 
-                    defaultValue="500"
-                    className="block w-full pl-4 pr-16 py-2.5 border border-slate-300 rounded-md text-sm text-slate-900 font-semibold focus:outline-none focus:ring-2 focus:ring-[#0d3c4b] focus:border-transparent transition-shadow" 
-                  />
-                  <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
-                    <span className="text-slate-400 text-sm font-medium">pairs</span>
-                  </div>
-                </div>
+                <input 
+                  type="number" 
+                  value={requiredQty}
+                  min={1}
+                  onChange={(e) => setRequiredQty(Number(e.target.value))}
+                  className="block w-full px-4 py-2.5 border border-slate-300 rounded-md text-sm text-slate-900 font-semibold focus:outline-none focus:ring-2 focus:ring-[#0d3c4b] focus:border-transparent" 
+                  required
+                />
               </div>
             </div>
 
-            {/* Deficit Alert */}
-            <div className="bg-red-50/50 border border-red-200 rounded-md px-4 py-3 flex items-center justify-between">
-              <div className="flex items-center gap-2 text-red-600">
-                <AlertCircle className="w-5 h-5" />
-                <span className="font-bold text-sm">-450 pairs urgent deficit</span>
-                <span className="text-sm font-medium text-red-500/80 hidden sm:inline">(90% stock shortfall against standard 14-day quota)</span>
+            {/* Deficit Alert Box */}
+            {deficit > 0 && (
+              <div className="bg-red-50/70 border border-red-200 rounded-md px-4 py-3 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-red-600">
+                  <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                  <span className="font-bold text-sm">-{deficit.toLocaleString()} units net deficit</span>
+                </div>
+                <span className="text-xs font-bold text-red-700 uppercase tracking-wider bg-red-100 px-2 py-1 rounded">Priority Requisition</span>
               </div>
-              <span className="text-xs font-bold text-red-700 uppercase tracking-wider bg-red-100 px-2 py-1 rounded">High Deficit Alert</span>
-            </div>
+            )}
 
             {/* Priority Level */}
             <div>
@@ -271,7 +349,7 @@ const ReportShortage = () => {
                 <label className="block text-sm font-semibold text-slate-900">
                   Priority Level <span className="text-red-500">*</span>
                 </label>
-                <span className="text-xs text-slate-500 font-medium">Defines automated escalation thresholds</span>
+                <span className="text-xs text-slate-500 font-medium">Determines cluster routing urgency</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {priorities.map((priority) => (
@@ -285,141 +363,113 @@ const ReportShortage = () => {
                     }`}
                   >
                     <div className="flex justify-between items-start mb-2">
-                      <span className={`text-sm font-bold ${
-                        selectedPriority === priority.id && priority.id === 'Critical' ? 'text-red-700' : 'text-slate-900'
-                      }`}>
+                      <span className="text-sm font-bold text-slate-900">
                         {priority.title}
                       </span>
-                      {priority.id === 'Critical' ? (
-                        <AlertOctagon className={`w-4 h-4 ${selectedPriority === priority.id ? 'text-red-600' : 'text-slate-400'}`} />
-                      ) : (
-                        <span className={`w-2 h-2 rounded-full mt-1 ${priority.color}`}></span>
-                      )}
+                      <span className={`w-2.5 h-2.5 rounded-full ${priority.color}`}></span>
                     </div>
-                    <p className={`text-xs font-medium mb-1 ${
-                      selectedPriority === priority.id && priority.id === 'Critical' ? 'text-red-900' : 'text-slate-700'
-                    }`}>
-                      {priority.description}
-                    </p>
-                    <p className={`text-[11px] ${
-                      selectedPriority === priority.id && priority.id === 'Critical' ? 'text-red-600 font-semibold' : 'text-slate-500'
-                    }`}>
-                      {priority.runway}
-                    </p>
+                    <p className="text-xs font-medium text-slate-700 mb-1">{priority.description}</p>
+                    <p className="text-[11px] text-slate-500">{priority.runway}</p>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Department and Runway Row */}
+            {/* Clinical Department */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-semibold text-slate-900 mb-2">
-                  Clinical Department / Primary Ward <span className="text-red-500">*</span>
+                  Clinical Ward / Department
                 </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Building className="h-4 w-4 text-slate-400" />
-                  </div>
-                  <select className="block w-full pl-10 pr-10 py-2.5 border border-slate-300 rounded-md text-sm text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-[#0d3c4b] focus:border-transparent appearance-none bg-white">
-                    <option>ICU & Emergency Operating Theatres (Theatres 1-4)</option>
-                    <option>General Surgery Ward</option>
-                    <option>Maternity & Neonatal</option>
-                  </select>
-                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                    <ChevronDown className="h-4 w-4 text-slate-400" />
-                  </div>
-                </div>
-                <p className="text-xs text-slate-500 mt-2">Primary point of consumption impacted by stockout.</p>
+                <input 
+                  type="text" 
+                  value={department}
+                  onChange={(e) => setDepartment(e.target.value)}
+                  className="block w-full px-4 py-2.5 border border-slate-300 rounded-md text-sm text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-[#0d3c4b]"
+                />
               </div>
 
               <div>
                 <label className="block text-sm font-semibold text-slate-900 mb-2">
-                  Estimated Depletion Runway <span className="text-red-500">*</span>
+                  Estimated Depletion Runway
                 </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Clock className="h-4 w-4 text-slate-400" />
-                  </div>
-                  <select className="block w-full pl-10 pr-10 py-2.5 border border-slate-300 rounded-md text-sm text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-[#0d3c4b] focus:border-transparent appearance-none bg-white">
-                    <option>&lt; 24 Hours (Immediate critical shortage)</option>
-                    <option>24 - 48 Hours</option>
-                    <option>2 - 5 Days</option>
-                  </select>
-                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                    <ChevronDown className="h-4 w-4 text-slate-400" />
-                  </div>
-                </div>
-                <p className="text-xs text-slate-500 mt-2">Time remaining until complete bed/theatre halt.</p>
+                <input 
+                  type="text" 
+                  value={runway}
+                  onChange={(e) => setRunway(e.target.value)}
+                  className="block w-full px-4 py-2.5 border border-slate-300 rounded-md text-sm text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-[#0d3c4b]"
+                />
               </div>
             </div>
 
-            {/* Justification Textarea */}
+            {/* Notes */}
             <div>
-              <div className="flex justify-between items-end mb-2">
-                <label className="block text-sm font-semibold text-slate-900">
-                  Clinical Justification & Notes <span className="text-red-500">*</span>
-                </label>
-                <span className="text-xs text-slate-500 font-medium">248 / 500 characters</span>
-              </div>
+              <label className="block text-sm font-semibold text-slate-900 mb-2">
+                Clinical Justification & Notes
+              </label>
               <textarea 
-                rows="4" 
-                className="block w-full p-4 border border-slate-300 rounded-md text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#0d3c4b] focus:border-transparent transition-shadow resize-none"
-                defaultValue="Emergency surgical caseload increased by 40% over the last 48 hours following road traffic casualty transfers from Kilinochchi. Size 7.5 sterile gloves depleted; immediate stock required to maintain round-the-clock neuro and trauma operations."
+                rows="3" 
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                className="block w-full p-3.5 border border-slate-300 rounded-md text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#0d3c4b] resize-none"
               ></textarea>
-              <div className="flex justify-between items-center mt-2">
-                <p className="text-xs text-slate-500">Include batch specifics, emergency patient counts, or acceptable alternative sizes (e.g. Size 7.0/8.0).</p>
-                <button className="text-xs font-semibold text-[#0d3c4b] hover:text-[#1e6075] flex items-center gap-1">
-                  <History className="w-3.5 h-3.5" />
-                  Insert previous requisition note
-                </button>
-              </div>
             </div>
 
             {/* Authorization Checkbox */}
-            <div className="bg-slate-50 border border-slate-200 rounded-md p-4 flex gap-3">
-              <div className="flex-shrink-0 mt-0.5">
-                <div className="w-5 h-5 rounded bg-[#0d3c4b] flex items-center justify-center cursor-pointer shadow-sm">
-                  <CheckSquare className="w-4 h-4 text-white" />
-                </div>
-              </div>
-              <div>
-                <p className="text-sm font-bold text-slate-900 mb-1">Institutional & Clinical Officer Authorization</p>
-                <p className="text-xs text-slate-700 leading-relaxed">
-                  I confirm that this shortage is verified by the Chief Medical Officer / Supervising Pharmacist (SLMC Reg active). 
-                  False reporting of critical alerts triggers provincial audit under Ministry of Health logistics guidelines.
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 flex gap-3">
+              <input 
+                type="checkbox" 
+                id="auth"
+                checked={authorized}
+                onChange={(e) => setAuthorized(e.target.checked)}
+                className="mt-1 w-4 h-4 rounded border-slate-300 text-[#0d3c4b] accent-[#0d3c4b] cursor-pointer"
+              />
+              <label htmlFor="auth" className="cursor-pointer">
+                <p className="text-sm font-bold text-slate-900 mb-0.5">Clinical Officer Verification</p>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  I confirm that this requisition is authorized by the Supervising Pharmacist / Medical Superintendent. Saving will write directly to the national MongoDB database.
                 </p>
-              </div>
+              </label>
             </div>
 
           </div>
 
-          {/* Form Actions / Footer */}
+          {/* Form Actions */}
           <div className="px-6 py-5 border-t border-slate-100 bg-white flex flex-col-reverse sm:flex-row justify-between items-center gap-4">
-            <button onClick={() => navigate('/dashboard')} className="text-sm font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-1.5 transition-colors w-full sm:w-auto justify-center">
-              <ArrowLeft className="w-4 h-4" />
-              Return to Dashboard
+            <button 
+              type="button" 
+              onClick={() => navigate('/dashboard')} 
+              className="text-sm font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-1.5 transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" /> Return to Dashboard
             </button>
             <div className="flex items-center gap-3 w-full sm:w-auto">
-              <button className="w-full sm:w-auto px-5 py-2.5 border border-slate-300 rounded-md text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-sm">
+              <button 
+                type="button"
+                onClick={() => {
+                  localStorage.setItem('shortage_draft', JSON.stringify({ medicine, currentQty, requiredQty, selectedPriority, department, runway, notes }));
+                  alert('Draft saved locally in your browser!');
+                }}
+                className="w-full sm:w-auto px-5 py-2.5 border border-slate-300 rounded-md text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-sm"
+              >
                 Save Draft
               </button>
-              <button className="w-full sm:w-auto px-5 py-2.5 bg-[#0d3c4b] hover:bg-[#092a35] rounded-md text-sm font-semibold text-white transition-colors shadow-sm flex items-center justify-center gap-2">
-                Submit Report & Match Stock
-                <Send className="w-4 h-4" />
+              <button 
+                type="submit" 
+                disabled={loading}
+                className="w-full sm:w-auto px-6 py-2.5 bg-[#0d3c4b] hover:bg-[#092a35] disabled:opacity-70 disabled:cursor-not-allowed rounded-md text-sm font-bold text-white transition-all shadow-md flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Saving to MongoDB...</>
+                ) : (
+                  <>Submit Requisition & Save to MongoDB <Send className="w-4 h-4" /></>
+                )}
               </button>
             </div>
           </div>
-        </div>
 
-        {/* Global Footer Notes */}
-        <div className="flex flex-col sm:flex-row justify-between items-center mt-6 text-[11px] text-slate-500 font-medium">
-          <div className="flex gap-6 mb-2 sm:mb-0">
-            <span className="flex items-center gap-1.5"><Search className="w-3.5 h-3.5" /> Automated matching active (Radius: 120km)</span>
-            <span className="flex items-center gap-1.5"><ShieldAlert className="w-3.5 h-3.5" /> SLMC Level-3 Encrypted Requisition</span>
-          </div>
-          <span>System Version: v2.4.1 (MSD Gov-LK)</span>
-        </div>
+        </form>
+
       </main>
     </div>
   );
