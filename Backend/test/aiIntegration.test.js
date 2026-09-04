@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 
 process.env.AI_SERVICE_URL = "http://localhost:8000";
 const { requestRecommendations } = require("../services/aiService");
-const { buildSupplierPayload, buildRecipientPayload } = require("../services/aiDataAdapter");
+const { buildSupplierPayload, buildRecipientPayload, toAiRequest, toAiStock } = require("../services/aiDataAdapter");
 
 const request = {
   requestId: "REQ001", hospitalId: "H010", medicine: "Insulin", quantity: 80,
@@ -49,4 +49,11 @@ test("AI client converts aborts into timeout failures", async () => {
     options.signal.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" })));
   });
   await assert.rejects(() => requestRecommendations("/api/v1/recommend/suppliers", {}, fetchMock, 1), { code: "AI_SERVICE_UNAVAILABLE", message: "AI service request timed out" });
+});
+
+test("adapter preserves the Python status vocabulary", () => {
+  assert.equal(toAiRequest({ ...request, status: "accepted" }).status, "cancelled");
+  assert.equal(toAiRequest({ ...request, status: "cancelled" }).status, "cancelled");
+  assert.equal(toAiStock({ ...stock, status: "unavailable" }).status, "unavailable");
+  assert.equal(toAiStock({ ...stock, status: "available" }).status, "available");
 });

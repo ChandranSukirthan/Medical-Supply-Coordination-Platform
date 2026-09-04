@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node server.js",
+    "seed": "node seed/seed.js",
     "test": "node --test"
   },
   "keywords": [],
