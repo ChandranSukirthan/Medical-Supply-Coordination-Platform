@@ -56,7 +56,7 @@ const getMyStock = async (req, res, next) => {
 
 const getAvailableStock = async (req, res, next) => {
   try {
-    return send(res, 200, await Stock.find({ status: "available", quantity: { $gt: 0 }, expiryDate: { $gte: new Date() } }).sort({ expiryDate: 1 }));
+    return send(res, 200, await Stock.find({ status: "available", expiryDate: { $gte: new Date() }, $expr: { $gt: [{ $subtract: ["$quantity", { $ifNull: ["$reservedQuantity", 0] }] }, 0] } }).sort({ expiryDate: 1 }));
   } catch (error) { return next(error); }
 };
 
@@ -75,6 +75,7 @@ const updateStock = async (req, res, next) => {
     if (stock.hospitalId !== req.user.hospitalId) throw fail("You are not authorized to modify this stock", 403, "STOCK_OWNERSHIP_DENIED");
     const body = { ...req.body, hospitalId: req.user.hospitalId, stockId: stock.stockId };
     validateStock(body);
+    if (Number(body.quantity) < (stock.reservedQuantity || 0)) throw fail("Quantity cannot be lower than reserved stock", 409, "RESERVED_STOCK_CONFLICT");
     Object.assign(stock, stockData(body, req.user.hospitalId));
     await stock.save();
     return send(res, 200, stock);

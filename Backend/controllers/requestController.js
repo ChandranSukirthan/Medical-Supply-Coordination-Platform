@@ -73,7 +73,7 @@ const updateRequest = async (req, res, next) => {
     const request = await findRequest(req.params.id);
     if (!request) throw fail("Request not found", 404, "REQUEST_NOT_FOUND");
     if (request.hospitalId !== req.user.hospitalId) throw fail("You are not authorized to modify this request", 403, "REQUEST_OWNERSHIP_DENIED");
-    if (request.status === "cancelled") throw fail("Cancelled requests cannot be edited", 409, "REQUEST_CANCELLED");
+    if (request.status !== "open") throw fail("Only open requests can be edited", 409, "REQUEST_NOT_OPEN");
     const body = { ...req.body, hospitalId: req.user.hospitalId, requestId: request.requestId, status: "open" };
     validateRequest(body);
     Object.assign(request, requestData(body, req.user.hospitalId));
@@ -87,6 +87,7 @@ const cancelRequest = async (req, res, next) => {
     const request = await findRequest(req.params.id);
     if (!request) throw fail("Request not found", 404, "REQUEST_NOT_FOUND");
     if (request.hospitalId !== req.user.hospitalId) throw fail("You are not authorized to modify this request", 403, "REQUEST_OWNERSHIP_DENIED");
+    if (request.status !== "open") throw fail("Only open requests can be cancelled", 409, "REQUEST_NOT_OPEN");
     request.status = "cancelled";
     await request.save();
     return send(res, 200, request, "Request cancelled successfully");

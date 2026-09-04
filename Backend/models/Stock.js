@@ -6,6 +6,7 @@ const stockSchema = new mongoose.Schema(
     hospitalId: { type: String, required: true, ref: "Hospital", trim: true, index: true },
     medicine: { type: String, required: true, trim: true },
     quantity: { type: Number, required: true, min: 0 },
+    reservedQuantity: { type: Number, default: 0, min: 0 },
     location: { type: String, required: true, trim: true },
     province: { type: String, required: true, trim: true },
     expiryDate: { type: Date, required: true },
@@ -14,6 +15,6 @@ const stockSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-stockSchema.index({ status: 1, quantity: 1, expiryDate: 1 });
+stockSchema.index({ status: 1, quantity: 1, reservedQuantity: 1, expiryDate: 1 });
 
 module.exports = mongoose.model("Stock", stockSchema);

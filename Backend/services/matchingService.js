@@ -4,7 +4,7 @@ const { normalizeMedicine } = require("../utils/medicine");
 const availableStockFilter = (request) => ({
   hospitalId: { $ne: request.hospitalId },
   status: "available",
-  quantity: { $gt: 0 },
+  $expr: { $gt: [{ $subtract: ["$quantity", { $ifNull: ["$reservedQuantity", 0] }] }, 0] },
   expiryDate: { $gte: new Date() },
   medicine: normalizeMedicine(request.medicine),
 });
@@ -19,7 +19,7 @@ const findEligibleSuppliers = async (request) => {
       availableQuantity: 0,
       stockIds: [],
     };
-    current.availableQuantity += stock.quantity;
+    current.availableQuantity += stock.quantity - (stock.reservedQuantity || 0);
     current.stockIds.push(stock.stockId);
     suppliers.set(stock.hospitalId, current);
   }
@@ -32,7 +32,7 @@ const getAvailableQuantity = async (request, supplierHospitalId) => {
     ...availableStockFilter(request),
     hospitalId: supplierHospitalId,
   });
-  return stocks.reduce((total, stock) => total + stock.quantity, 0);
+  return stocks.reduce((total, stock) => total + stock.quantity - (stock.reservedQuantity || 0), 0);
 };
 
 module.exports = { findEligibleSuppliers, getAvailableQuantity };

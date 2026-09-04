@@ -1,9 +1,10 @@
-const express = require('express');
-const router = express.Router();
-const { getRecommendationsForRequest, getRecommendationsForStock } = require('../controllers/recommendationController');
-const { protect } = require('../middleware/auth');
+const express = require("express");
+const controller = require("../controllers/recommendationController");
+const { authenticate } = require("../middleware/authMiddleware");
 
-router.get('/requests/:requestId', protect, getRecommendationsForRequest);
-router.get('/stock/:stockId', protect, getRecommendationsForStock);
+const router = express.Router();
+router.use(authenticate);
+router.get("/requests/:requestId", controller.recommendSuppliers);
+router.get("/stock/:stockId", controller.recommendRecipients);
 
 module.exports = router;
