@@ -1,0 +1,153 @@
+[
+  {
+    "stockId": "STK001",
+    "hospitalId": "H001",
+    "medicine": "Insulin",
+    "quantity": 120,
+    "location": "Colombo",
+    "province": "Western",
+    "expiryDate": "2027-02-10",
+    "status": "available"
+  },
+  {
+    "stockId": "STK002",
+    "hospitalId": "H002",
+    "medicine": "Insulin",
+    "quantity": 60,
+    "location": "Kandy",
+    "province": "Central",
+    "expiryDate": "2027-01-15",
+    "status": "available"
+  },
+  {
+    "stockId": "STK003",
+    "hospitalId": "H003",
+    "medicine": "Paracetamol",
+    "quantity": 500,
+    "location": "Galle",
+    "province": "Southern",
+    "expiryDate": "2026-11-20",
+    "status": "available"
+  },
+  {
+    "stockId": "STK004",
+    "hospitalId": "H004",
+    "medicine": "Amoxicillin",
+    "quantity": 200,
+    "location": "Jaffna",
+    "province": "Northern",
+    "expiryDate": "2026-12-05",
+    "status": "available"
+  },
+  {
+    "stockId": "STK005",
+    "hospitalId": "H005",
+    "medicine": "Metformin",
+    "quantity": 300,
+    "location": "Negombo",
+    "province": "Western",
+    "expiryDate": "2027-03-30",
+    "status": "available"
+  },
+  {
+    "stockId": "STK006",
+    "hospitalId": "H006",
+    "medicine": "Insulin",
+    "quantity": 0,
+    "location": "Kurunegala",
+    "province": "North Western",
+    "expiryDate": "2027-04-01",
+    "status": "available"
+  },
+  {
+    "stockId": "STK007",
+    "hospitalId": "H007",
+    "medicine": "Paracetamol",
+    "quantity": 150,
+    "location": "Anuradhapura",
+    "province": "North Central",
+    "expiryDate": "2026-09-03",
+    "status": "available"
+  },
+  {
+    "stockId": "STK008",
+    "hospitalId": "H008",
+    "medicine": "Amoxicillin",
+    "quantity": 80,
+    "location": "Batticaloa",
+    "province": "Eastern",
+    "expiryDate": "2027-06-15",
+    "status": "available"
+  },
+  {
+    "stockId": "STK009",
+    "hospitalId": "H009",
+    "medicine": "Insulin",
+    "quantity": 40,
+    "location": "Ratnapura",
+    "province": "Sabaragamuwa",
+    "expiryDate": "2026-10-20",
+    "status": "available"
+  },
+  {
+    "stockId": "STK010",
+    "hospitalId": "H010",
+    "medicine": "Metformin",
+    "quantity": 100,
+    "location": "Matara",
+    "province": "Southern",
+    "expiryDate": "2027-05-01",
+    "status": "available"
+  },
+  {
+    "stockId": "STK011",
+    "hospitalId": "H001",
+    "medicine": "Paracetamol",
+    "quantity": 800,
+    "location": "Colombo",
+    "province": "Western",
+    "expiryDate": "2027-08-10",
+    "status": "available"
+  },
+  {
+    "stockId": "STK012",
+    "hospitalId": "H002",
+    "medicine": "Amoxicillin",
+    "quantity": 250,
+    "location": "Kandy",
+    "province": "Central",
+    "expiryDate": "2027-07-22",
+    "status": "available"
+  },
+  {
+    "stockId": "STK013",
+    "hospitalId": "H003",
+    "medicine": "Insulin",
+    "quantity": 75,
+    "location": "Galle",
+    "province": "Southern",
+    "expiryDate": "2027-09-10",
+    "status": "unavailable"
+  },
+  {
+    "stockId": "STK014",
+    "hospitalId": "H005",
+    "medicine": "Insulin",
+    "quantity": 90,
+    "location": "Negombo",
+    "province": "Western",
+    "expiryDate": "2026-10-01",
+    "status": "available"
+  },
+  {
+    "stockId": "STK015",
+    "hospitalId": "H004",
+    "medicine": "Metformin",
+    "quantity": 50,
+    "location": "Jaffna",
+    "province": "Northern",
+    "expiryDate": "2027-01-10",
+    "status": "available"
+  }
+]
+
