@@ -26,7 +26,7 @@ def _int_env(key: str, default: int) -> int:
 
 
 # ─── Server ───────────────────────────────────────────────────────────────────
-PORT: int = _int_env("AI_SERVICE_PORT", 8000)
+PORT: int = _int_env("PORT", _int_env("AI_SERVICE_PORT", 8000))
 ALLOWED_ORIGINS: list[str] = os.getenv(
     "ALLOWED_ORIGINS",
     "http://localhost:5000,http://localhost:3000,http://localhost:5173"
