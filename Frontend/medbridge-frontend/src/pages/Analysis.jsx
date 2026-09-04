@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Sparkles, Activity, AlertTriangle, CheckCircle } from 'lucide-react';
+import api from '../api';
 
 const Analysis = () => {
   const navigate = useNavigate();
@@ -16,15 +17,8 @@ const Analysis = () => {
 
   const fetchRequests = async () => {
     try {
-      // Assuming a token is in localStorage, though simplified here
-      const token = localStorage.getItem('token');
-      const headers = { 'Content-Type': 'application/json' };
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      const res = await fetch('http://localhost:5000/api/v1/requests/open', { headers });
-      if (!res.ok) throw new Error('Failed to fetch requests');
-      const data = await res.json();
-      setRequests(data.data || []);
+      const res = await api.get('/requests/open');
+      setRequests(res.data?.data || []);
     } catch (err) {
       console.error(err);
       setError('Could not load requests for analysis. Ensure you are logged in.');
@@ -37,14 +31,8 @@ const Analysis = () => {
     setRecommendations(null);
     setError(null);
     try {
-      const token = localStorage.getItem('token');
-      const headers = { 'Content-Type': 'application/json' };
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      const res = await fetch(`http://localhost:5000/api/v1/recommendations/requests/${request._id || request.requestId}`, { headers });
-      if (!res.ok) throw new Error('Failed to fetch recommendations');
-      const data = await res.json();
-      setRecommendations(data);
+      const res = await api.get(`/recommendations/requests/${request._id || request.requestId}`);
+      setRecommendations(res.data);
     } catch (err) {
       console.error(err);
       setError('AI Analysis failed or no recommendations available.');
